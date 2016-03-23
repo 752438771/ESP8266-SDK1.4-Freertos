@@ -12,6 +12,10 @@ void smartlink_start(void);
 void smartlink_stop(void);
 void smartlink_init(void);
 
+void ICACHE_FLASH_ATTR
+smartconfig_task(void *pvParameters);
+
+
 
 
 #endif /* __SMARTLINK_H__ */

@@ -24,7 +24,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
+#include "smartlink.h"
 
 
 #define  FLASH_ADDRESS            0x200000
@@ -355,7 +355,9 @@ ESP_Rest(void)
     ESP_WriteDataToFlash((u8 *)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 
     g_struProtocolController.u8SmntFlag = SMART_CONFIG_STATE;
-	SmartLink();
+	//SmartLink();
+
+    xTaskCreate(smartconfig_task, "smartconfig_task", 256, NULL, 2, NULL);
 }
 /*************************************************
 * Function: ESP_SendTcpData

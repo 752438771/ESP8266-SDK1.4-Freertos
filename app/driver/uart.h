@@ -419,7 +419,7 @@ void uart_init_new(void);
 /**
   * @}
   */
-void uart0_handler(void);
+void uart0_handler(unsigned char *buf, unsigned short len);
 
 
 #ifdef __cplusplus
