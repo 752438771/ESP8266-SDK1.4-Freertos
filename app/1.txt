@@ -1,0 +1,25 @@
+gen_misc.sh version 20151112
+gen flash=4Mbytes
+make[1]: Entering directory '/home/espressif/ESP8266_RTOS_SDK-master/app/driver'
+DEPEND: xtensa-lx106-elf-gcc -M -Os -g -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals -ffunction-sections -fdata-sections -DICACHE_FLASH -I include -I ../include -I ../../include/espressif/esp8266 -I ../../include/lwip/ipv4/lwip -I ../driver -I ../src -I ../System -I ../Wifi -I /home/espressif/ESP8266_RTOS_SDK-master/include -I /home/espressif/ESP8266_RTOS_SDK-master/extra_include -I /home/espressif/ESP8266_RTOS_SDK-master/include/espressif -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip/ipv4 -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip/ipv6 -I /home/espressif/ESP8266_RTOS_SDK-master/include/nopoll -I /home/espressif/ESP8266_RTOS_SDK-master/include/spiffs -I /home/espressif/ESP8266_RTOS_SDK-master/include/ssl -I /home/espressif/ESP8266_RTOS_SDK-master/include/json uart.c
+xtensa-lx106-elf-gcc -Os -g -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals -ffunction-sections -fdata-sections  -DICACHE_FLASH   -I include -I ../include -I ../../include/espressif/esp8266 -I ../../include/lwip/ipv4/lwip -I ../driver -I ../src -I ../System -I ../Wifi -I /home/espressif/ESP8266_RTOS_SDK-master/include -I /home/espressif/ESP8266_RTOS_SDK-master/extra_include -I /home/espressif/ESP8266_RTOS_SDK-master/include/espressif -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip/ipv4 -I /home/espressif/ESP8266_RTOS_SDK-master/include/lwip/ipv6 -I /home/espressif/ESP8266_RTOS_SDK-master/include/nopoll -I /home/espressif/ESP8266_RTOS_SDK-master/include/spiffs -I /home/espressif/ESP8266_RTOS_SDK-master/include/ssl -I /home/espressif/ESP8266_RTOS_SDK-master/include/json  -o .output/eagle/debug/obj/uart.o -c uart.c
+xtensa-lx106-elf-ar ru .output/eagle/debug/lib/libdriver.a .output/eagle/debug/obj/uart.o 
+make[1]: Leaving directory '/home/espressif/ESP8266_RTOS_SDK-master/app/driver'
+make[1]: Entering directory '/home/espressif/ESP8266_RTOS_SDK-master/app/Wifi'
+make[1]: Leaving directory '/home/espressif/ESP8266_RTOS_SDK-master/app/Wifi'
+make[1]: Entering directory '/home/espressif/ESP8266_RTOS_SDK-master/app/System'
+make[1]: Leaving directory '/home/espressif/ESP8266_RTOS_SDK-master/app/System'
+make[1]: Entering directory '/home/espressif/ESP8266_RTOS_SDK-master/app/src'
+make[1]: Leaving directory '/home/espressif/ESP8266_RTOS_SDK-master/app/src'
+xtensa-lx106-elf-gcc  -L/home/espressif/ESP8266_RTOS_SDK-master/lib -Wl,--gc-sections -nostdlib -T../ld/eagle.app.v6.new.1024.app1.ld -Wl,--no-check-sections -u call_user_start -Wl,-static -Wl,--start-group -lespconn -lminic -lcirom -lgcc -lhal -lcrypto -lfreertos -llwip -lmain -lnet80211 -lnopoll -lphy -lpp -lsmartconfig -lssl -lwpa driver/.output/eagle/debug/lib/libdriver.a src/.output/eagle/debug/lib/libAadpter.a Wifi/.output/eagle/debug/lib/libWifi.a System/.output/eagle/debug/lib/libSystem.a -Wl,--end-group -o .output/eagle/debug/image/eagle.app.v6.out 
+
+!!!
+SDK_PATH: /home/espressif/ESP8266_RTOS_SDK-master
+BIN_PATH: /home/espressif/ESP8266_RTOS_SDK-master/bin/upgrade
+
+bin crc: 54412e51
+Support boot_v1.2 and +
+Generate user1.4096.new.4.bin successully in BIN_PATH
+boot.bin------------>0x00000
+user1.4096.new.4.bin--->0x01000
+!!!
