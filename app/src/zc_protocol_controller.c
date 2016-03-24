@@ -1162,8 +1162,14 @@ PCT_HandleEvent(PTC_ProtocolCon *pstruContoller)
 void //ICACHE_FLASH_ATTR
 PCT_Run()
 {
+    //static u32 u32count = 0;
     PTC_ProtocolCon *pstruContoller = &g_struProtocolController;
-
+#if 0
+    if (u32count++ % 6000 == 0)
+    {
+        ZC_Printf("state is %d\n", pstruContoller->u8MainState);
+    }
+#endif
     switch(pstruContoller->u8MainState)
     {
 		case PCT_STATE_SLEEP:
@@ -1206,6 +1212,7 @@ PCT_WakeUp()
 {
     if (PCT_STATE_INIT == g_struProtocolController.u8MainState)
     {
+        ZC_Printf("PCT_WakeUp\n");
         g_struProtocolController.u16SendBcNum = 0;
         ZC_ClientWakeUp();
         g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;

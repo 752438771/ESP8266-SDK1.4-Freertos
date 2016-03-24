@@ -81,6 +81,8 @@ LOCAL struct espconn user_udp_espconn;
 
 LOCAL os_timer_t task_timer;
 
+LOCAL os_timer_t dns_timer;
+
 extern volatile unsigned long  g_ulStatus;
 extern void AC_UartProcess(u8* inBuf, u32 datalen);
 extern void uart0_tx_buffer(uint8 *buf, uint16 len);
@@ -520,7 +522,7 @@ ESP_RecvFromCloud(void *arg, char *pusrdata, unsigned short length)
     //received some data from tcp connection    
     ZC_Printf("recv from cloud, len is %d\n", length);
     memcpy(g_u8recvbuffer, pusrdata, length);
-    ZC_Printf("copy ok\n");
+    //ZC_Printf("copy ok\n");
     MSG_RecvDataFromCloud(g_u8recvbuffer, length);
 }
 /*************************************************
@@ -576,6 +578,8 @@ ESP_ReconnectCloud(void *arg, sint8 err)
     ZC_Printf("user error code %d !!! \r\n",err);
     if (SMART_CONFIG_STATE == g_struProtocolController.u8SmntFlag)
     {
+        //(void)espconn_disconnect(&tcp_server_conn);
+        //os_delay_us(1000);
         return;
     }
 
@@ -613,6 +617,8 @@ ESP_DnsFoundHook(const char *name, ip_addr_t *ipaddr, void *arg)
 
     if (ipaddr->addr != 0)
     {
+        os_timer_disarm(&dns_timer);
+        
         memcpy(tcp_server_conn.proto.tcp->remote_ip, &ipaddr->addr, 4); // remote ip of tcp server which get by dns
         tcp_server_conn.proto.tcp->remote_port = ZC_CLOUD_PORT; // remote port of tcp server
         tcp_server_conn.proto.tcp->local_port = espconn_port(); //local port of ESP8266
@@ -643,6 +649,14 @@ ESP_DnsFoundHook(const char *name, ip_addr_t *ipaddr, void *arg)
 
 }
 
+LOCAL void
+user_dns_check_cb(void *arg)
+{
+    ZC_Printf("DNS check\n");
+    g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;
+}
+
+
 /*************************************************
 * Function: ESP_ConnectToCloud
 * Description: 
@@ -671,8 +685,14 @@ ESP_ConnectToCloud(PTC_Connection *pstruConnection)
         retval = espconn_gethostbyname(&tcp_server_conn,
                                         (const char *)g_struZcConfigDb.struCloudInfo.u8CloudAddr,
                                          &tcp_server_ip, ESP_DnsFoundHook);
-
+        ZC_Printf("espconn_gethostbyname ret is %d\n", retval);
+        ZC_Printf("addr is %s\n", g_struZcConfigDb.struCloudInfo.u8CloudAddr);
+        
         g_struProtocolController.u8MainState = PCT_STATE_INIT;
+        
+        /* 起一个定时器 */
+        os_timer_setfn(&dns_timer, (os_timer_func_t *)user_dns_check_cb, NULL);
+        os_timer_arm(&dns_timer, 2000, 0);
         return ZC_RET_OK;
     }
     
@@ -1023,7 +1043,7 @@ ESP_Sleep()
 * Parameter: 
 * History:
 *************************************************/
-#if 1
+#if 0
 static void //ICACHE_FLASH_ATTR
 ESP_Cloudfunc(void *arg)
 {
@@ -1050,7 +1070,7 @@ ESP_Cloudfunc(void *arg)
     
     if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
     {
-        u32Timer =  ESP_GetRandTime();
+        u32Timer = ESP_GetRandTime();
 
         PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
         g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
@@ -1120,7 +1140,7 @@ ESP_Cloudfunc(void *arg)
 *************************************************/
 void ESP_CreateTaskTimer(void)
 {
-#if 1
+#if 0
     os_timer_disarm(&task_timer);
     os_timer_setfn(&task_timer, (os_timer_func_t *)ESP_Cloudfunc, NULL);
     os_timer_arm(&task_timer, 100, 0);
