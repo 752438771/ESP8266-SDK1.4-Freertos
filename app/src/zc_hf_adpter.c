@@ -440,7 +440,6 @@ ESP_WakeUp()
 void //ICACHE_FLASH_ATTR
 ESP_Sleep()
 {
-
     u32 u32Index;
     ZC_Printf("HF_Sleep\r\n");
     close(g_Bcfd);
@@ -471,7 +470,6 @@ ESP_Sleep()
     g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
     g_struUartBuffer.u32RecvLen = 0;
 
-    g_struProtocolController.u32AckFlag = 0;
     g_struProtocolController.u32RecvAccessFlag = 0;
 }
 /*************************************************
@@ -595,12 +593,12 @@ static void ESP_CloudRecvfunc(void)
             
             if(s32RecvLen > 0) 
             {
-                ZC_Printf("recv data len = %d", s32RecvLen);
+                ZC_Printf("recv data len = %d\n", s32RecvLen);
                 MSG_RecvDataFromCloud(g_u8recvbuffer, s32RecvLen);
             }
             else
             {
-                ZC_Printf("recv error, len = %d",s32RecvLen);
+                ZC_Printf("recv error, len = %d\n",s32RecvLen);
                 PCT_DisConnectCloud(&g_struProtocolController);
                 
                 g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
@@ -645,7 +643,7 @@ static void ESP_CloudRecvfunc(void)
             }
             else
             {
-                ZC_Printf("accept client = %d", connfd);
+                ZC_Printf("accept client = %d\n", connfd);
             }
         }
     }
@@ -828,7 +826,7 @@ static void ESP_Cloudfunc(void* arg)
         }
         if (TI_IS_DISCONNECTED(g_ulStatus))
         {
-            ZC_Printf("TI_Cloudfunc dis");
+            ZC_Printf("ESP_Cloudfunc dis\n");
             ESP_Sleep();
             ESP_BcInit();
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_DISCONNECTED);
@@ -1023,7 +1021,7 @@ ESP_Init(void)
 
 	if(xTaskCreate(ESP_Cloudfunc, ((const char*)"HF_Cloudfunc"), 512, NULL, 2, NULL) != 1)
     {   
-		printf("\n\r%s xTaskCreate(init_thread) failed", __FUNCTION__);
+		printf("\n\r%s xTaskCreate(init_thread) failed\n", __FUNCTION__);
     }
     return 1;
 

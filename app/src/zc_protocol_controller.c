@@ -127,7 +127,6 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
     MSG_Init();
     TIMER_Init();
 
-    g_struProtocolController.u32AckFlag = 0;
     g_struProtocolController.u32RecvAccessFlag = 0;
 
     g_struProtocolController.u8keyRecv = PCT_KEY_UNRECVED;
