@@ -34,6 +34,11 @@ ZC_SendBc()
         sleepcount = 0;
         return;
     }
+    if (ZC_MAGIC_FLAG == g_struZcConfigDb.struDeviceInfo.u32UnBcFlag)
+    {
+        sleepcount = 0;
+        return;
+    }    
     sleepcount++;
     if (sleepcount > g_u32BcSleepCount)
     {

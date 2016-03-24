@@ -122,7 +122,7 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
     g_struProtocolController.struClientConnection.u8IpType = ZC_IPTYPE_IPV4;
     g_struProtocolController.struClientConnection.u8ConnectionType = ZC_CONNECT_TYPE_TCP;
 
-    ZC_ConfigInitPara();
+    ZC_ConfigInitDefault();
 
     MSG_Init();
     TIMER_Init();
@@ -143,6 +143,7 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
     g_struOtaBuf.u16DateUsed = 0;
     g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
     ZC_ClientInit();
+    ZC_ConfigInitPara();
 }
 /*************************************************
 * Function: PCT_SendEmptyMsg

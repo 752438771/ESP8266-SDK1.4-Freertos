@@ -9,8 +9,6 @@
 */
 #include <zc_configuration.h>
 #include <zc_protocol_controller.h>
-#include "user_config.h"
-#include "spi_flash.h"
 
 ZC_ConfigDB g_struZcConfigDb;
 ZC_RegisterInfo g_struRegisterInfo;
@@ -34,24 +32,31 @@ u8 g_u8DefaultTokenKey[ZC_HS_SESSION_KEY_LEN] =
     0x05, 0x05, 0x05, 0x05
 };
 
+
 /*************************************************
-* Function: ZC_StoreConnectionInfo
+* Function: ZC_ConfigInitDefault
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_ResetAccessInfo()
+void ZC_ConfigInitDefault(void)
 {
-    g_struZcConfigDb.struConnection.u32MagicFlag = ZC_MAGIC_FLAG;
+    g_struZcConfigDb.struSwitchInfo.u32SecSwitch = 1;
+    g_struZcConfigDb.struSwitchInfo.u32TraceSwitch = 0;
+    g_struZcConfigDb.struSwitchInfo.u32WifiConfig = 0;
     g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
-    //hfuflash_erase_page(0, 1);
-    spi_flash_read(0, (unsigned int*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
-		//g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
-}
+    g_struZcConfigDb.struSwitchInfo.u16ServerPort = ZC_CLOUD_PORT;
 
+    memcpy(g_struZcConfigDb.struCloudInfo.u8CloudAddr, "test.ablecloud.cn", ZC_CLOUD_ADDR_MAX_LEN);
+    memcpy(g_struZcConfigDb.struCloudInfo.u8CloudKey, g_u8DefaultCloudKey, ZC_CLOUD_KEY_MAX_LEN);
+    memcpy(g_struZcConfigDb.struCloudInfo.u8TokenKey, g_u8DefaultTokenKey, ZC_HS_SESSION_KEY_LEN);
+
+    g_struZcConfigDb.struConnection.u32MagicFlag = 0xFFFFFFFF;
+    g_struZcConfigDb.struDeviceInfo.u32UnBindFlag = 0xFFFFFFFF;
+    g_struZcConfigDb.struDeviceInfo.u32UnBcFlag = 0xFFFFFFFF;    
+}
 /*************************************************
 * Function: ZC_ConfigInitPara
 * Description: 
@@ -60,26 +65,21 @@ ZC_ResetAccessInfo()
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_ConfigInitPara()
+void ZC_ConfigInitPara(void)
 {
-    g_struZcConfigDb.u32MagicFlag = ZC_MAGIC_FLAG;
-    g_struZcConfigDb.struSwitchInfo.u32SecSwitch = 0;//0不加密    1相应加密  2不用rsa加密;
-    g_struZcConfigDb.struSwitchInfo.u32TraceSwitch = 0;
-    g_struZcConfigDb.struSwitchInfo.u32WifiConfig = 0;
-    g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
-    g_struZcConfigDb.struSwitchInfo.u16ServerPort = ZC_CLOUD_PORT;
-
-//    memcpy(g_struZcConfigDb.struCloudInfo.u8CloudAddr, "device.ablecloud.cn", ZC_CLOUD_ADDR_MAX_LEN);
-    memcpy(g_struZcConfigDb.struCloudInfo.u8CloudAddr, "test.ablecloud.cn", ZC_CLOUD_ADDR_MAX_LEN);
-    memcpy(g_struZcConfigDb.struCloudInfo.u8CloudKey, g_u8DefaultCloudKey, ZC_CLOUD_KEY_MAX_LEN);
-    memcpy(g_struZcConfigDb.struCloudInfo.u8TokenKey, g_u8DefaultTokenKey, ZC_HS_SESSION_KEY_LEN);
-        
-    g_struZcConfigDb.struConnection.u32MagicFlag = 0xFFFFFFFF;
-    g_struZcConfigDb.struDeviceInfo.u32UnBindFlag = 0xFFFFFFFF;
+    u32 u32Crc;
+    g_struProtocolController.pstruMoudleFun->pfunReadFlash((u8 *)&g_struZcConfigDb,sizeof(g_struZcConfigDb));
+    u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + sizeof(u32), sizeof(g_struZcConfigDb) - sizeof(u32));
+    if (u32Crc != g_struZcConfigDb.u32Crc)
+    {
+        ZC_ConfigInitDefault();
+        ZC_Printf("no para, use default\n");
+    }
+    else
+    {
+        ZC_Printf("Crc check ok\n");
+    }
 }
-
-
 /*************************************************
 * Function: ZC_ConfigPara
 * Description: 
@@ -88,8 +88,7 @@ ZC_ConfigInitPara()
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_ConfigPara(u8 *pu8Data)
+void ZC_ConfigPara(u8 *pu8Data)
 {
     ZC_Configuration *pstruConfig;
     pstruConfig = (ZC_Configuration*)pu8Data;
@@ -100,15 +99,17 @@ ZC_ConfigPara(u8 *pu8Data)
     g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = ZC_HTONL(pstruConfig->u32ServerAddrConfig);
 
     g_struZcConfigDb.struSwitchInfo.u32ServerIp = ZC_HTONL(pstruConfig->u32IpAddr);
+    g_struZcConfigDb.struSwitchInfo.u16ServerPort = ZC_CLOUD_PORT;
 
     memcpy(g_struZcConfigDb.struSwitchInfo.u8Password, pstruConfig->u8Password, ZC_PASSWORD_MAX_LEN);
     memcpy(g_struZcConfigDb.struSwitchInfo.u8Ssid, pstruConfig->u8Ssid, ZC_SSID_MAX_LEN);
     
     memcpy(g_struZcConfigDb.struCloudInfo.u8CloudAddr, pstruConfig->u8CloudAddr, ZC_CLOUD_ADDR_MAX_LEN);
     memcpy(g_struZcConfigDb.struCloudInfo.u8CloudKey, pstruConfig->u8CloudKey, ZC_CLOUD_KEY_MAX_LEN);
-
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);
     g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 }
+
 
 /*************************************************
 * Function: ZC_StoreRegisterInfo
@@ -118,8 +119,7 @@ ZC_ConfigPara(u8 *pu8Data)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_StoreRegisterInfo(u8 *pu8Data,u8 u8RegisterFlag)
+void ZC_StoreRegisterInfo(u8 *pu8Data,u8 u8RegisterFlag)
 {
     ZC_RegisterReq *pstruRegisterMsg;
     u8 u8Mac[ZC_SERVER_MAC_LEN];
@@ -149,10 +149,11 @@ ZC_StoreRegisterInfo(u8 *pu8Data,u8 u8RegisterFlag)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_StoreTokenKey(u8 *pu8Data)
+void ZC_StoreTokenKey(u8 *pu8Data)
 {
+    g_struZcConfigDb.struDeviceInfo.u32UnBcFlag = ZC_MAGIC_FLAG;   
     memcpy(g_struZcConfigDb.struCloudInfo.u8TokenKey, pu8Data, ZC_HS_SESSION_KEY_LEN);
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);
     g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 }
 
@@ -164,13 +165,12 @@ ZC_StoreTokenKey(u8 *pu8Data)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_StoreConnectionInfo(u8 *pu8Ssid, u8 *pu8Password)
+void ZC_StoreConnectionInfo(u8 *pu8Ssid, u8 *pu8Password)
 {
     g_struZcConfigDb.struConnection.u32MagicFlag = ZC_MAGIC_FLAG;
     memcpy(g_struZcConfigDb.struConnection.u8Ssid, pu8Ssid, ZC_SSID_MAX_LEN);
     memcpy(g_struZcConfigDb.struConnection.u8Password, pu8Password, ZC_PASSWORD_MAX_LEN);
-
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);
     g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 }
 
@@ -182,15 +182,16 @@ ZC_StoreConnectionInfo(u8 *pu8Ssid, u8 *pu8Password)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_StoreAccessInfo(u8 *pu8ServerIp, u8 *pu8ServerPort)
+void ZC_StoreAccessInfo(u8 *pu8ServerIp, u8 *pu8ServerPort)
 {
     g_struZcConfigDb.struConnection.u32MagicFlag = ZC_MAGIC_FLAG;
     g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 1;
     memcpy(&g_struZcConfigDb.struSwitchInfo.u32ServerIp, pu8ServerIp, ZC_SERVER_ADDR_MAX_LEN);
     memcpy(&g_struZcConfigDb.struSwitchInfo.u16ServerPort, pu8ServerPort, ZC_SERVER_PORT_MAX_LEN);
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);
     g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 }
+
 /*************************************************
 * Function: ZC_GetStoreInfor
 * Description: 
@@ -199,8 +200,7 @@ ZC_StoreAccessInfo(u8 *pu8ServerIp, u8 *pu8ServerPort)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_GetStoreInfor(u8 u8Type, u8 **pu8Data)
+void ZC_GetStoreInfor(u8 u8Type, u8 **pu8Data)
 {
     switch(u8Type)
     {
@@ -230,11 +230,31 @@ ZC_GetStoreInfor(u8 u8Type, u8 **pu8Data)
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ZC_ConfigUnBind(u32 u32UnBindFlag)
+void ZC_ConfigUnBind(u32 u32UnBindFlag)
 {
     g_struZcConfigDb.struDeviceInfo.u32UnBindFlag = u32UnBindFlag; 
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);    
     g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8*)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
+    sys_msleep(100);
+}
+
+/*************************************************
+* Function: ZC_ConfigReset
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void ZC_ConfigReset()
+{
+    ZC_Printf("ZC_ConfigReset\n\r");
+    g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;            
+    g_struZcConfigDb.struDeviceInfo.u32UnBcFlag = 0xFFFFFFFF;
+    g_struZcConfigDb.u32Crc = crc16_ccitt(((u8 *)&g_struZcConfigDb) + 4, sizeof(g_struZcConfigDb) - 4);    
+    g_struProtocolController.pstruMoudleFun->pfunWriteFlash((u8 *)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
+    sys_msleep(100);
+    g_struProtocolController.pstruMoudleFun->pfunRest();
 }
 
 /******************************* FILE END ***********************************/

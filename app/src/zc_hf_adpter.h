@@ -110,7 +110,7 @@ extern "C" {
 int ESP_Init(void);
 void ESP_WakeUp(void);
 void ESP_Sleep(void);
-void ESP_ReadDataFormFlash(void);
+void ESP_ReadDataFromFlash(u8 *pu8Data, u16 u16Len);
 void ESP_WriteDataToFlash(u8 *pu8Data, u16 u16Len);
 void ESP_GotIp(void);
 void ESP_WakeUp(void);

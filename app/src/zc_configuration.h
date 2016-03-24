@@ -62,16 +62,18 @@ typedef struct
 typedef struct
 {
     u32  u32UnBindFlag;//use if u32UnBindFlag is 1;     
+    u32  u32UnBcFlag; 
 }ZC_DeviceInfo;
 
 typedef struct 
 {
-    u32 u32MagicFlag;
-    ZC_ConnectionInfo struConnection;
-    ZC_CloudInfo    struCloudInfo;
-    ZC_SwitchInfo   struSwitchInfo;
-    ZC_DeviceInfo   struDeviceInfo;
+    u32 u32Crc;
+    ZC_ConnectionInfo struConnection;//100 byte
+    ZC_CloudInfo    struCloudInfo; // 70byte
+    ZC_SwitchInfo   struSwitchInfo;//120byte
+    ZC_DeviceInfo   struDeviceInfo;//8byte
 }ZC_ConfigDB;
+
 
 extern ZC_ConfigDB g_struZcConfigDb;
 extern ZC_RegisterInfo g_struRegisterInfo;

@@ -85,7 +85,7 @@ ESP_UartSend(u8* inBuf, u32 datalen)
     uart0_tx_buffer(inBuf, (u16)datalen);
 }
 /*************************************************
-* Function: ESP_ReadDataFormFlash
+* Function: ESP_ReadDataFromFlash
 * Description: 
 * Author: cxy 
 * Returns: 
@@ -93,18 +93,11 @@ ESP_UartSend(u8* inBuf, u32 datalen)
 * History:
 *************************************************/
 void //ICACHE_FLASH_ATTR
-ESP_ReadDataFormFlash(void)
+ESP_ReadDataFromFlash(u8 *pu8Data, u16 u16Len)
 {
-    u32 u32MagicFlag = 0xFFFFFFFF;
-
-    spi_flash_read(FLASH_ADDRESS, (unsigned int *)(&u32MagicFlag), 4);
-    if (ZC_MAGIC_FLAG == u32MagicFlag)
-    {   
-    	spi_flash_read(FLASH_ADDRESS, (unsigned int  *)(&g_struZcConfigDb), sizeof(ZC_ConfigDB));
-    }
-    else
+    if (SPI_FLASH_RESULT_OK != spi_flash_read(FLASH_ADDRESS, (u32 *)pu8Data, (u32)u16Len))
     {
-        ZC_Printf("no para, use default\n");
+        ZC_Printf("ESP_ReadDataFromFlash error\n");
     }
 }
 /*************************************************
@@ -332,11 +325,12 @@ ESP_SendDataToMoudle(u8 *pu8Data, u16 u16DataLen)
 void //ICACHE_FLASH_ATTR
 ESP_Rest(void)
 {
+#if 0
     os_printf("ESP_Rest\n");
     g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
     g_struZcConfigDb.struSwitchInfo.u32SecSwitch = 1;
     ESP_WriteDataToFlash((u8 *)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
-
+#endif
     g_struProtocolController.u8SmntFlag = SMART_CONFIG_STATE;
 
     xTaskCreate(smartconfig_task, "smartconfig_task", 256, NULL, 2, NULL);
@@ -797,7 +791,7 @@ void ESP_BcInit(void)
     struRemoteAddr.sin_port = htons(ZC_MOUDLE_BROADCAST_PORT); 
     struRemoteAddr.sin_addr.s_addr=inet_addr("255.255.255.255"); 
     g_pu8RemoteAddr = (u8*)&struRemoteAddr;
-    g_u32BcSleepCount = 10000;
+    g_u32BcSleepCount = 10;
 
     return;
 }
@@ -984,6 +978,7 @@ ESP_Init(void)
     g_struHfAdapter.pfunStopTimer = ESP_StopTimer;
     g_struHfAdapter.pfunRest = ESP_Rest;
     g_struHfAdapter.pfunWriteFlash = ESP_WriteDataToFlash;
+    g_struHfAdapter.pfunReadFlash = ESP_ReadDataFromFlash;
     g_struHfAdapter.pfunSendUdpData = ESP_SendUdpData;   
     g_struHfAdapter.pfunGetMac = ESP_GetMac;
     g_struHfAdapter.pfunReboot = ESP_Reboot;
@@ -993,7 +988,7 @@ ESP_Init(void)
 
     g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
     g_struUartBuffer.u32RecvLen = 0;
-    ESP_ReadDataFormFlash();
+    //ESP_ReadDataFromFlash();
     ESP_BcInit();
 
     memset(g_u8DeviceId, '0', ZC_HS_DEVICE_ID_LEN);
