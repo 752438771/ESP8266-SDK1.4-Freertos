@@ -25,6 +25,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "smartlink.h"
+#include "sockets.h"
 
 
 #define  FLASH_ADDRESS            0x200000
@@ -72,6 +73,8 @@ u8  g_u8BcSendBuffer[100];
 u8  g_u8JdRcvBuffer[256];
 u32 g_u32BcSleepCount = 800;//800
 
+struct sockaddr_in struRemoteAddr;
+
 
 LOCAL struct espconn tcp_client_conn;    /* 做server */
 struct espconn tcp_server_conn;          /* 做client */
@@ -82,6 +85,8 @@ LOCAL struct espconn user_udp_espconn;
 LOCAL os_timer_t task_timer;
 
 LOCAL os_timer_t dns_timer;
+
+ip_addr_t tcp_server_ip;
 
 extern volatile unsigned long  g_ulStatus;
 extern void AC_UartProcess(u8* inBuf, u32 datalen);
@@ -361,63 +366,26 @@ ESP_Rest(void)
 
     xTaskCreate(smartconfig_task, "smartconfig_task", 256, NULL, 2, NULL);
 }
+
+void ESP_SendTcpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
+{
+    send(u32Fd, pu8Data, u16DataLen, 0);
+}
 /*************************************************
-* Function: ESP_SendTcpData
+* Function: HF_SendUdpData
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-void //ICACHE_FLASH_ATTR
-ESP_SendTcpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
+void ESP_SendUdpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
 {
-    struct espconn *pesp_conn = &tcp_client_conn;
-
-    remot_info *premot = NULL;
-    uint8 count = 0;
-    sint8 value = ESPCONN_OK;
-
-    /* client/server */
-    if (PCT_SERVER_TCP_SOCKET == u32Fd)
-    {
-        espconn_send(&tcp_server_conn, pu8Data, u16DataLen);
-        ZC_Printf("Send to cloud dataLen is :%d\n",u16DataLen);
-        g_struProtocolController.u32AckFlag = 1;
-    }
-    else if (PCT_CLIENT_TCP_SOCKET == u32Fd)
-    {
-        if (espconn_get_connection_info(pesp_conn,&premot,0) == ESPCONN_OK)
-        {
-            ZC_Printf("link_cnt is %u\n", pesp_conn->link_cnt);
-            for (count = 0; count < pesp_conn->link_cnt; count ++)
-            {
-                 pesp_conn->proto.tcp->remote_port = premot[count].remote_port;
-                 
-                 pesp_conn->proto.tcp->remote_ip[0] = premot[count].remote_ip[0];
-                 pesp_conn->proto.tcp->remote_ip[1] = premot[count].remote_ip[1];
-                 pesp_conn->proto.tcp->remote_ip[2] = premot[count].remote_ip[2];
-                 pesp_conn->proto.tcp->remote_ip[3] = premot[count].remote_ip[3];
-
-                 espconn_send(pesp_conn, pu8Data, u16DataLen);
-                 ZC_Printf("Send to app dataLen is :%d\n",u16DataLen);
-            }
-        }    
-    }
+    sendto(u32Fd,(char*)pu8Data,u16DataLen,0,
+        (struct sockaddr *)pstruParam->pu8AddrPara,
+        sizeof(struct sockaddr_in)); 
 }
-/*************************************************
-* Function: ESP_SendUdpData
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void //ICACHE_FLASH_ATTR
-ESP_SendUdpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
-{
-    espconn_send(&user_udp_espconn, pu8Data, u16DataLen);
-}
+
 /*************************************************
 * Function: ESP_GetMac
 * Description: 
@@ -450,443 +418,7 @@ ESP_Reboot(void)
     ZC_Printf("Reboot system !!!\n");
     system_restart();
 }
-/*************************************************
-* Function: ESP_SendToCloudSuccess
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_SendToCloudSuccess(void *arg)
-{
-    g_struProtocolController.u32AckFlag = 2;   /* got ack */
-    ZC_Printf("ESP_SendToCloudSuccess success!!! \n");
-}
-/*************************************************
-* Function: ESP_DisconFromCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_DisconFromCloud(void *arg)
-{
-    u32 u32Timer;
-    struct espconn *pespconn = arg;
-    
-    if (SMART_CONFIG_STATE == g_struProtocolController.u8SmntFlag)
-    {
-        return;
-    }
 
-	ZC_Printf("ESP_DisconFromCloud !!!\n");
-
-    u32Timer = ESP_GetRandTime();
-    if (tcp_server_conn.proto.tcp->remote_port == pespconn->proto.tcp->remote_port)
-    {
-        (void)espconn_disconnect(&tcp_server_conn);
-        os_delay_us(1000);
-        
-        PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
-
-    }
-}
-/*************************************************
-* Function: ESP_DisconFromRedirect
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_DisconFromRedirect(void *arg)
-{
-	ZC_Printf("ESP_DisconFromRedirect !!!\n");
-}
-/*************************************************
-* Function: ESP_RecvFromCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_RecvFromCloud(void *arg, char *pusrdata, unsigned short length)
-{
-    //received some data from tcp connection    
-    ZC_Printf("recv from cloud, len is %d\n", length);
-    memcpy(g_u8recvbuffer, pusrdata, length);
-    //ZC_Printf("copy ok\n");
-    MSG_RecvDataFromCloud(g_u8recvbuffer, length);
-}
-/*************************************************
-* Function: ESP_ConnectedCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_ConnectedCloud(void *arg)
-{
-    u32 u32Keeplive;
-    struct espconn *pespconn = arg;
-    espconn_regist_recvcb(pespconn, ESP_RecvFromCloud);
-    espconn_regist_sentcb(pespconn, ESP_SendToCloudSuccess);
-    if (ZC_CLOUD_PORT != pespconn->proto.tcp->remote_port)
-    {
-        espconn_set_opt(pespconn, ESPCONN_KEEPALIVE); // enable TCP keep alive
-        //set keepalive: 35s = 20 + 5*3 
-        u32Keeplive = 20; 
-        espconn_set_keepalive(pespconn, ESPCONN_KEEPIDLE, &u32Keeplive); 
-        u32Keeplive = 5; 
-        espconn_set_keepalive(pespconn, ESPCONN_KEEPINTVL, &u32Keeplive); 
-        u32Keeplive = 3; //try times 
-        espconn_set_keepalive(pespconn, ESPCONN_KEEPCNT, &u32Keeplive);
-        espconn_regist_disconcb(pespconn, ESP_DisconFromCloud);
-    }
-    else
-    {
-        espconn_regist_disconcb(pespconn, ESP_DisconFromRedirect);
-    }
-
-	g_struProtocolController.u8MainState = PCT_STATE_WAIT_ACCESS;
-	g_struProtocolController.u8keyRecv = PCT_KEY_UNRECVED;
-
-    g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
-    ZC_Printf("connect succeed !!! \r\n");
-}
-/*************************************************
-* Function: ESP_ReconnectCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_ReconnectCloud(void *arg, sint8 err)
-{
-    u32 u32Timer;
-    ZC_Printf("user error code %d !!! \r\n",err);
-    if (SMART_CONFIG_STATE == g_struProtocolController.u8SmntFlag)
-    {
-        //(void)espconn_disconnect(&tcp_server_conn);
-        //os_delay_us(1000);
-        return;
-    }
-
-    //if(g_struProtocolController.u8MainState == PCT_STATE_INIT)return;
-    u32Timer = ESP_GetRandTime();
-	PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
-	g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
-	g_struUartBuffer.u32RecvLen = 0;
-	g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;
-}
-/*************************************************
-* Function: ESP_DnsFoundHook
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_DnsFoundHook(const char *name, ip_addr_t *ipaddr, void *arg)
-{
-    struct espconn *pespconn = (struct espconn *)arg;
-    sint8 temp;
-
-    if (NULL == ipaddr) 
-    {
-        ZC_Printf("ESP_DnsFoundHook NULL \r\n");
-        return;
-    }
-
-   //dns got ip
-    ZC_Printf("ESP_DnsFoundHook %d.%d.%d.%d \r\n",
-            *((uint8 *)&ipaddr->addr), *((uint8 *)&ipaddr->addr + 1),
-            *((uint8 *)&ipaddr->addr + 2), *((uint8 *)&ipaddr->addr + 3));
-
-    if (ipaddr->addr != 0)
-    {
-        os_timer_disarm(&dns_timer);
-        
-        memcpy(tcp_server_conn.proto.tcp->remote_ip, &ipaddr->addr, 4); // remote ip of tcp server which get by dns
-        tcp_server_conn.proto.tcp->remote_port = ZC_CLOUD_PORT; // remote port of tcp server
-        tcp_server_conn.proto.tcp->local_port = espconn_port(); //local port of ESP8266
-
-        espconn_regist_connectcb(&tcp_server_conn, ESP_ConnectedCloud); // register connect callback
-        espconn_regist_reconcb(&tcp_server_conn, ESP_ReconnectCloud); // register reconnect callback as error handler
-        temp = espconn_connect(&tcp_server_conn);
-        if(temp == ESPCONN_ISCONN)
-        {
-            ZC_Printf("ESP_DnsFoundHook: already connected\n ");
-            g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
-            g_struProtocolController.u8MainState = PCT_STATE_WAIT_ACCESS;
-            return;
-        }
-        else
-        {
-            g_struProtocolController.struCloudConnection.u32ConnectionTimes++;
-        }
-        ZC_Printf("tcp connect %d, %d.%d.%d.%d, %d,%d\n",temp,
-                tcp_server_conn.proto.tcp->remote_ip[0],
-                tcp_server_conn.proto.tcp->remote_ip[1],
-                tcp_server_conn.proto.tcp->remote_ip[2],
-                tcp_server_conn.proto.tcp->remote_ip[3],
-                tcp_server_conn.proto.tcp->remote_port,
-				tcp_server_conn.proto.tcp->local_port);
-
-    }
-
-}
-
-LOCAL void
-user_dns_check_cb(void *arg)
-{
-    ZC_Printf("DNS check\n");
-    g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;
-}
-
-
-/*************************************************
-* Function: ESP_ConnectToCloud
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-u32 //ICACHE_FLASH_ATTR
-ESP_ConnectToCloud(PTC_Connection *pstruConnection)
-{
-    struct ip_addr struIp;
-    ip_addr_t tcp_server_ip;
-    int retval = 255;
-    u16 port;
-    
-    if (1 == g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig)
-    {
-        port = g_struZcConfigDb.struSwitchInfo.u16ServerPort;
-        struIp.addr = ZC_HTONL(g_struZcConfigDb.struSwitchInfo.u32ServerIp);
-        retval = HF_SUCCESS;
-    }
-    else
-    {
-        port = ZC_CLOUD_PORT;
-        retval = espconn_gethostbyname(&tcp_server_conn,
-                                        (const char *)g_struZcConfigDb.struCloudInfo.u8CloudAddr,
-                                         &tcp_server_ip, ESP_DnsFoundHook);
-        ZC_Printf("espconn_gethostbyname ret is %d\n", retval);
-        ZC_Printf("addr is %s\n", g_struZcConfigDb.struCloudInfo.u8CloudAddr);
-        
-        g_struProtocolController.u8MainState = PCT_STATE_INIT;
-        
-        /* 起一个定时器 */
-        os_timer_setfn(&dns_timer, (os_timer_func_t *)user_dns_check_cb, NULL);
-        os_timer_arm(&dns_timer, 2000, 0);
-        return ZC_RET_OK;
-    }
-    
-    ZC_Printf("connect cloud_default ip %d.%d.%d.%d %d\r\n",
-            *((uint8 *)&struIp.addr), *((uint8 *)&struIp.addr + 1),
-            *((uint8 *)&struIp.addr + 2), *((uint8 *)&struIp.addr + 3), port);
-
-    memcpy(tcp_server_conn.proto.tcp->remote_ip, &struIp.addr, 4); 
-    
-    tcp_server_conn.proto.tcp->remote_port = port;
-    tcp_server_conn.proto.tcp->local_port = espconn_port(); //local port of ESP8266
-    
-    espconn_regist_connectcb(&tcp_server_conn, ESP_ConnectedCloud); // register connect callback
-    espconn_regist_reconcb(&tcp_server_conn, ESP_ReconnectCloud); // register reconnect callback as error handler
-    
-    if (0 != espconn_connect(&tcp_server_conn))
-    {
-        ZC_Printf("Connect not ok\n");
-        g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;
-        return;
-    }
-    g_struProtocolController.struCloudConnection.u32ConnectionTimes++;
-    g_struProtocolController.u8MainState = PCT_STATE_INIT;
-    ZC_Rand(g_struProtocolController.RandMsg);
-
-    return ZC_RET_OK;
-
-}
-/*************************************************
-* Function: ESP_SendToClient
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_SendToClient(void *arg)
-{
-    ZC_Printf("tcp sent cb \r\n");
-}
-/*************************************************
-* Function: ESP_RecvFromClient
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_RecvFromClient(void *arg, char *pusrdata, unsigned short length)
-{
-    struct espconn *pespconn = arg;
-    ZC_Printf("ZC_RecvDataFromClient\n");
-//    ZCHEX_Printf(pusrdata, length);
-    memcpy(g_u8recvbuffer, pusrdata, length);
-    ZC_RecvDataFromClient(0, g_u8recvbuffer, length);   /* 第一个参数没意义，传0进去即可 */
-}
-/*************************************************
-* Function: ESP_DisconCliet
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_DisconCliet(void *arg)
-{
-    ZC_Printf("tcp disconnect succeed !!! \r\n");
-}
-/*************************************************
-* Function: ESP_ReconClient
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_ReconClient(void *arg, sint8 err)
-{
-    ZC_Printf("reconnect callback, error code %d !!! \r\n",err);
-}
-/*************************************************
-* Function: ESP_ClientConnected
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_ClientConnected(void *arg)
-{
-    struct espconn *pesp_conn = arg;
-
-    ZC_Printf("Client connected\n");
-
-    espconn_regist_recvcb(&tcp_client_conn, ESP_RecvFromClient);
-    espconn_regist_reconcb(&tcp_client_conn, ESP_ReconClient);
-    espconn_regist_disconcb(&tcp_client_conn, ESP_DisconCliet);
-    espconn_regist_sentcb(&tcp_client_conn, ESP_SendToClient);
-
-    memcpy(tcp_client_conn.proto.tcp->remote_ip, pesp_conn->proto.tcp->remote_ip,4);
-    tcp_client_conn.proto.tcp->remote_port = pesp_conn->proto.tcp->remote_port;
-
-    ZC_Printf("tcp_server_listen ip %d.%d.%d.%d port %d localport %d!!! \r\n"
-    		,pesp_conn->proto.tcp->remote_ip[0]
-			,pesp_conn->proto.tcp->remote_ip[1]
-			,pesp_conn->proto.tcp->remote_ip[2]
-			,pesp_conn->proto.tcp->remote_ip[3]
-			,pesp_conn->proto.tcp->remote_port
-			,pesp_conn->proto.tcp->local_port);
-}
-/*************************************************
-* Function: ESP_ListenClient
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-u32 //ICACHE_FLASH_ATTR
-ESP_ListenClient(PTC_Connection *pstruConnection)
-{
-    tcp_client_conn.proto.tcp->local_port = pstruConnection->u16Port;
-    ZC_Printf("Tcp Listen Port = %d\n", pstruConnection->u16Port);
-    espconn_regist_connectcb(&tcp_client_conn, ESP_ClientConnected);
-    s8 ret = espconn_accept(&tcp_client_conn);
-    ZC_Printf("espconn_accept [%d] !!! \r\n", ret);
-
-    return ZC_RET_OK;
-}
-/*************************************************
-* Function: ESP_RecvFromBroadcast
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_RecvFromBroadcast(void *arg, char *pusrdata, unsigned short length)
-{
-    //ZC_Printf("recv udp data: \n");
-    //ZCHEX_Printf(pusrdata,length);
-    ZC_SendClientQueryReq(pusrdata,length);
-}
-/*************************************************
-* Function: ESP_SendBroadcast
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-LOCAL void //ICACHE_FLASH_ATTR
-ESP_SendBroadcast(void *arg)
-{
-    //    struct espconn *pespconn = arg;
-    //ZC_Printf("Send Bc ok\n");
-}
-/*************************************************
-* Function: ESP_BcInit
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-void //ICACHE_FLASH_ATTR
-ESP_BcInit(void)
-{
-    user_udp_espconn.type = ESPCONN_UDP;
-    user_udp_espconn.proto.udp = (esp_udp *)malloc(sizeof(esp_udp));
-
-    tcp_server_conn.type = ESPCONN_TCP;
-    tcp_server_conn.proto.tcp = (esp_tcp *)malloc(sizeof(esp_tcp));
-    g_struProtocolController.struCloudConnection.u32Socket = PCT_SERVER_TCP_SOCKET;
-
-    tcp_client_conn.type = ESPCONN_TCP;
-    //tcp_client_conn.state = ESPCONN_NONE;
-    tcp_client_conn.proto.tcp = (esp_tcp *)malloc(sizeof(esp_tcp));
-      
-    g_struProtocolController.struClientConnection.u32Socket = PCT_CLIENT_TCP_SOCKET;
-    tcp_client_conn.proto.tcp->local_port = ZC_SERVER_PORT;
-    
-    g_struProtocolController.u16SendBcNum = 0;
-    g_struProtocolController.u8MainState = PCT_STATE_INIT;
-    g_u32BcSleepCount = 10;
-
-    return;
-}
 /*************************************************
 * Function: ESP_GotIp
 * Description:
@@ -900,33 +432,9 @@ ESP_GotIp(void)
 {
 	struct ip_info info;
 	wifi_get_ip_info(0, &info);
-	memcpy(user_udp_espconn.proto.udp->local_ip, (u8*)&(info.ip.addr), 4);
+	//memcpy(user_udp_espconn.proto.udp->local_ip, (u8*)&(info.ip.addr), 4);
 	g_u32GloablIp = info.ip.addr;
 
-}
-/*************************************************
-* Function: ESP_UdpBroadcast
-* Description:
-* Author: cxy
-* Returns:
-* Parameter:
-* History:
-*************************************************/
-void //ICACHE_FLASH_ATTR
-ESP_UdpBroadcast(void)
-{
-    user_udp_espconn.proto.udp->remote_ip[3] = 255;
-    user_udp_espconn.proto.udp->remote_ip[2] = 255;
-    user_udp_espconn.proto.udp->remote_ip[1] = 255;
-    user_udp_espconn.proto.udp->remote_ip[0] = 255;
-
-    user_udp_espconn.proto.udp->local_port = ZC_MOUDLE_PORT;
-    user_udp_espconn.proto.udp->remote_port = ZC_MOUDLE_BROADCAST_PORT;  // ESP8266 udp remote port
-
-    espconn_regist_recvcb(&user_udp_espconn, ESP_RecvFromBroadcast); // 收到数据回调
-    espconn_regist_sentcb(&user_udp_espconn, ESP_SendBroadcast); // 发送数据成功回调
-    
-    espconn_create(&user_udp_espconn);   // create udp
 }
 /*************************************************
 * Function: ESP_Init
@@ -936,70 +444,7 @@ ESP_UdpBroadcast(void)
 * Parameter: 
 * History:
 *************************************************/
-int //ICACHE_FLASH_ATTR
-ESP_Init(void)
-{
-	char mac_buf[MAC_LEN];
-    char mac_string[ZC_HS_DEVICE_ID_LEN];
-    u32 u32BinAddr;
-	g_u64Domain = ((((u64)((SUB_DOMAIN_ID & 0xff00) >> 8)) << 48) + (((u64)(SUB_DOMAIN_ID & 0xff)) << 56) + (((u64)MAJOR_DOMAIN_ID & 0xff) << 40) + ((((u64)MAJOR_DOMAIN_ID & 0xff00) >> 8) << 32)
-	+ ((((u64)MAJOR_DOMAIN_ID & 0xff0000) >> 16) << 24)
-	+ ((((u64)MAJOR_DOMAIN_ID & 0xff000000) >> 24) << 16)
-	+ ((((u64)MAJOR_DOMAIN_ID & 0xff00000000) >> 32) << 8)
-	+ ((((u64)MAJOR_DOMAIN_ID & 0xff0000000000) >> 40) << 0));
 
-    printf("ESP Init\n");
-
-    g_struHfAdapter.pfunConnectToCloud = ESP_ConnectToCloud;
-    g_struHfAdapter.pfunListenClient = ESP_ListenClient;
-    g_struHfAdapter.pfunSendTcpData = ESP_SendTcpData;   
-    g_struHfAdapter.pfunUpdate = ESP_FirmwareUpdate;     
-    g_struHfAdapter.pfunUpdateFinish = ESP_FirmwareUpdateFinish;
-    g_struHfAdapter.pfunSendToMoudle = ESP_SendDataToMoudle;  
-    g_struHfAdapter.pfunSetTimer = ESP_SetTimer;   
-    g_struHfAdapter.pfunStopTimer = ESP_StopTimer;
-    g_struHfAdapter.pfunRest = ESP_Rest;
-    g_struHfAdapter.pfunWriteFlash = ESP_WriteDataToFlash;
-    g_struHfAdapter.pfunSendUdpData = ESP_SendUdpData;   
-    g_struHfAdapter.pfunGetMac = ESP_GetMac;
-    g_struHfAdapter.pfunReboot = ESP_Reboot;
-    g_struHfAdapter.pfunUartSend = ESP_UartSend;
-
-    g_u16TcpMss = 1000;
-
-    PCT_Init(&g_struHfAdapter);
-
-    g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
-    g_struUartBuffer.u32RecvLen = 0;
-    ESP_ReadDataFormFlash();
-    ESP_BcInit();
-
-    memset(g_u8DeviceId, '0', ZC_HS_DEVICE_ID_LEN);
-    memset(mac_string, '\0', ZC_HS_DEVICE_ID_LEN);
-    
-    wifi_get_macaddr(STATION_IF, mac_buf);
-    ZCHEX_Printf(mac_buf, MAC_LEN);
-    ZC_HexToString(mac_string, mac_buf, MAC_LEN);
-    memcpy(g_u8DeviceId, mac_string, MAC_LEN * 2);
-
-    memcpy(g_struRegisterInfo.u8PrivateKey, g_u8ModuleKey, ZC_MODULE_KEY_LEN);
-    memcpy(g_struRegisterInfo.u8DeviciId, g_u8DeviceId, ZC_HS_DEVICE_ID_LEN);
-    memcpy(g_struRegisterInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, &g_u64Domain, ZC_DOMAIN_LEN);
-    memcpy(g_struRegisterInfo.u8EqVersion, g_u8EqVersion, ZC_EQVERSION_LEN);
-
-    u32BinAddr = system_get_userbin_addr();
-    if (USER1_BIN_ADDR == u32BinAddr)
-    {
-        g_struProtocolController.u32UserBinNum = 0x81;
-    }
-    else if (USER2_BIN_ADDR == u32BinAddr)
-    {
-        g_struProtocolController.u32UserBinNum = 0x1;
-    }
-    ESP_CreateTaskTimer();
-    return 1;
-
-}
 
 /*************************************************
 * Function: ESP_WakeUp
@@ -1013,7 +458,7 @@ void //ICACHE_FLASH_ATTR
 ESP_WakeUp()
 {
     PCT_WakeUp();
-    ZC_StartClientListen();
+    //ZC_StartClientListen();
 }
 /*************************************************
 * Function: ESP_Sleep
@@ -1026,7 +471,32 @@ ESP_WakeUp()
 void //ICACHE_FLASH_ATTR
 ESP_Sleep()
 {
+
     u32 u32Index;
+    ZC_Printf("HF_Sleep\r\n");
+    close(g_Bcfd);
+
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        close(g_struProtocolController.struClientConnection.u32Socket);
+        g_struProtocolController.struClientConnection.u32Socket = PCT_INVAILD_SOCKET;
+    }
+
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struCloudConnection.u32Socket)
+    {
+        close(g_struProtocolController.struCloudConnection.u32Socket);
+        g_struProtocolController.struCloudConnection.u32Socket = PCT_INVAILD_SOCKET;
+    }
+    
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            close(g_struClientInfo.u32ClientFd[u32Index]);
+            g_struClientInfo.u32ClientFd[u32Index] = PCT_INVAILD_SOCKET;
+        }
+    }
+
     PCT_Sleep();
     
     g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
@@ -1043,93 +513,6 @@ ESP_Sleep()
 * Parameter: 
 * History:
 *************************************************/
-#if 0
-static void //ICACHE_FLASH_ATTR
-ESP_Cloudfunc(void *arg)
-{
-    u32 u32Timer;
-    //disarm timer first
-    os_timer_disarm(&task_timer);
-
-	if (TI_IS_IP_ACQUIRED(g_ulStatus))
-    {
-        ZC_Printf("ESP_Cloudfunc ip aquired\n");
-        ESP_GotIp();
-        ESP_WakeUp();
-    	ESP_UdpBroadcast();
-        CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
-    }
-    if (TI_IS_DISCONNECTED(g_ulStatus))
-    {
-        ZC_Printf("ESP_Cloudfunc dis\n");
-        ESP_Sleep();
-        CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_DISCONNECTED);
-    }
-    Uart_RecvFromMcu();
-    PCT_Run();
-    
-    if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
-    {
-        u32Timer = ESP_GetRandTime();
-
-        PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
-        g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
-        g_struUartBuffer.u32RecvLen = 0;
-    }
-    else
-    {
-        MSG_SendDataToCloud((u8*)&g_struProtocolController.struCloudConnection);
-    }
-    ZC_SendBc();
-    
-    os_timer_setfn(&task_timer, (os_timer_func_t *)ESP_Cloudfunc, NULL);
-    os_timer_arm(&task_timer, 100, 0);
-
-}
-#else
-static void //ICACHE_FLASH_ATTR
-ESP_Cloudfunc(void *arg)
-{
-    u32 u32Timer;
-
-    while (1)
-    {
-        //ZC_Printf("ESP_Cloudfunc\n");
-    	if (TI_IS_IP_ACQUIRED(g_ulStatus))
-        {
-            ZC_Printf("ESP_Cloudfunc ip aquired\n");
-            ESP_GotIp();
-            ESP_WakeUp();
-        	ESP_UdpBroadcast();
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
-        }
-        if (TI_IS_DISCONNECTED(g_ulStatus))
-        {
-            ZC_Printf("ESP_Cloudfunc dis\n");
-            ESP_Sleep();
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_DISCONNECTED);
-        }
-        Uart_RecvFromMcu();
-        PCT_Run();
-        
-        if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
-        {
-            u32Timer =  ESP_GetRandTime();
-
-            PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
-            g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
-            g_struUartBuffer.u32RecvLen = 0;
-        }
-        else
-        {
-            MSG_SendDataToCloud((u8*)&g_struProtocolController.struCloudConnection);
-        }
-        ZC_SendBc();
-        os_delay_us(100);
-    }
-    vTaskDelete(NULL);
-}
-#endif
 /*************************************************
 * Function: ESP_CreateTaskTimer
 * Description:
@@ -1144,7 +527,7 @@ void ESP_CreateTaskTimer(void)
     os_timer_disarm(&task_timer);
     os_timer_setfn(&task_timer, (os_timer_func_t *)ESP_Cloudfunc, NULL);
     os_timer_arm(&task_timer, 100, 0);
-#else
+//#else
     xTaskCreate( ESP_Cloudfunc, ( signed char * ) "ESP_Cloudfunc", 384, ( void * ) NULL, 2, NULL); 
 #endif
 }
@@ -1188,6 +571,362 @@ u32 ESP_GetRandTime(void)
     u32Timer = (PCT_TIMER_INTERVAL_RECONNECT) * (u32Timer % 10 + 1 + u32Base);  
     return u32Timer;
 }
+
+
+
+/*************************************************
+* Function: HF_CloudRecvfunc
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+static void HF_CloudRecvfunc(void) 
+{
+    s8 s8ret;
+    s32 s32RecvLen=0; 
+    fd_set fdread;
+    u32 u32Index;
+    u32 u32Len = 0; 
+    u32 u32ActiveFlag = 0;
+    struct sockaddr_in cliaddr;
+    int connfd;
+    extern u8 g_u8ClientStart;
+    u32 u32MaxFd = 0;
+    struct timeval timeout; 
+    struct sockaddr_in addr;
+    int tmp = 1;    
+
+    ZC_StartClientListen();  /* 端口号9689，直连 */
+
+    u32ActiveFlag = 0;
+    
+    timeout.tv_sec= 0; 
+    timeout.tv_usec= 1000; 
+    
+    FD_ZERO(&fdread);
+
+    FD_SET(g_Bcfd, &fdread);
+    u32MaxFd = u32MaxFd > g_Bcfd ? u32MaxFd : g_Bcfd;
+    
+    /* 用于监听直连 */
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        FD_SET(g_struProtocolController.struClientConnection.u32Socket, &fdread);
+        u32MaxFd = u32MaxFd > g_struProtocolController.struClientConnection.u32Socket ? u32MaxFd : g_struProtocolController.struClientConnection.u32Socket;
+        u32ActiveFlag = 1;
+    }
+    /* 连接云端 */
+    if ((g_struProtocolController.u8MainState >= PCT_STATE_WAIT_ACCESSRSP) 
+        && (g_struProtocolController.u8MainState < PCT_STATE_DISCONNECT_CLOUD))
+    {
+        FD_SET(g_struProtocolController.struCloudConnection.u32Socket, &fdread);
+        u32MaxFd = u32MaxFd > g_struProtocolController.struCloudConnection.u32Socket ? u32MaxFd : g_struProtocolController.struCloudConnection.u32Socket;
+        u32ActiveFlag = 1;
+    }
+
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            FD_SET(g_struClientInfo.u32ClientFd[u32Index], &fdread);
+            u32MaxFd = u32MaxFd > g_struClientInfo.u32ClientFd[u32Index] ? u32MaxFd : g_struClientInfo.u32ClientFd[u32Index];
+            u32ActiveFlag = 1;            
+        }
+    }
+
+    if (0 == u32ActiveFlag)
+    {
+        return;
+    }
+    
+    s8ret = select(u32MaxFd + 1, &fdread, NULL, NULL, &timeout);
+    if(s8ret <= 0)
+    {
+       return;
+    }
+    if ((g_struProtocolController.u8MainState >= PCT_STATE_WAIT_ACCESSRSP) 
+        && (g_struProtocolController.u8MainState < PCT_STATE_DISCONNECT_CLOUD))
+    {
+        if (FD_ISSET(g_struProtocolController.struCloudConnection.u32Socket, &fdread))
+        {
+            s32RecvLen = recv(g_struProtocolController.struCloudConnection.u32Socket, g_u8recvbuffer, HF_MAX_SOCKET_LEN, 0); 
+            
+            if(s32RecvLen > 0) 
+            {
+                ZC_Printf("recv data len = %d", s32RecvLen);
+                MSG_RecvDataFromCloud(g_u8recvbuffer, s32RecvLen);
+            }
+            else
+            {
+                ZC_Printf("recv error, len = %d",s32RecvLen);
+                PCT_DisConnectCloud(&g_struProtocolController);
+                
+                g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
+                g_struUartBuffer.u32RecvLen = 0;
+            }
+        }
+        
+    }
+
+    for (u32Index = 0; u32Index < ZC_MAX_CLIENT_NUM; u32Index++)
+    {
+        if (0 == g_struClientInfo.u32ClientVaildFlag[u32Index])
+        {
+            /* g_struClientInfo.u32ClientFd 是tcp的新句柄 */
+            if (FD_ISSET(g_struClientInfo.u32ClientFd[u32Index], &fdread))
+            {
+                s32RecvLen = recv(g_struClientInfo.u32ClientFd[u32Index], g_u8recvbuffer, HF_MAX_SOCKET_LEN, 0); 
+                if (s32RecvLen > 0)
+                {
+                    ZC_RecvDataFromClient(g_struClientInfo.u32ClientFd[u32Index], g_u8recvbuffer, s32RecvLen);
+                }
+                else
+                {   
+                    ZC_ClientDisconnect(g_struClientInfo.u32ClientFd[u32Index]);
+                    close(g_struClientInfo.u32ClientFd[u32Index]);
+                }
+                
+            }
+        }
+        
+    }
+
+    if (PCT_INVAILD_SOCKET != g_struProtocolController.struClientConnection.u32Socket)
+    {
+        if (FD_ISSET(g_struProtocolController.struClientConnection.u32Socket, &fdread))
+        {
+            connfd = accept(g_struProtocolController.struClientConnection.u32Socket,(struct sockaddr *)&cliaddr, &u32Len);
+
+            if (ZC_RET_ERROR == ZC_ClientConnect((u32)connfd))
+            {
+                close(connfd);
+            }
+            else
+            {
+                ZC_Printf("accept client = %d", connfd);
+            }
+        }
+    }
+    /* 局域网发现，收到别的设备发过来消息，同时发送自己的信息 */
+    if (FD_ISSET(g_Bcfd, &fdread))
+    {
+        tmp = sizeof(addr); 
+        s32RecvLen = recvfrom(g_Bcfd, g_u8BcSendBuffer, 100, 0, (struct sockaddr *)&addr, (socklen_t*)&tmp); 
+        if(s32RecvLen > 0) 
+        {
+            ZC_SendClientQueryReq(g_u8BcSendBuffer, (u16)s32RecvLen);
+        } 
+    }
+}
+
+
+/*************************************************
+* Function: HF_ConnectToCloud
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+u32 ESP_ConnectToCloud(PTC_Connection *pstruConnection)
+{
+    int fd; 
+    struct sockaddr_in addr;
+    struct ip_addr struIp;
+    int retval;
+    u16 port;
+    int keepalive_enable = 1;
+    memset((char*)&addr, 0, sizeof(addr));
+    if (1 == g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig)
+    {
+        port = g_struZcConfigDb.struSwitchInfo.u16ServerPort;
+        struIp.addr = htonl(g_struZcConfigDb.struSwitchInfo.u32ServerIp);
+        retval = ZC_RET_OK;
+    }
+    else
+    {
+        port = ZC_CLOUD_PORT;
+        retval = netconn_gethostbyname((const char *)g_struZcConfigDb.struCloudInfo.u8CloudAddr, &struIp);
+    }
+
+    if (ZC_RET_OK != retval)
+    {
+        return ZC_RET_ERROR;
+    }
+
+    ZC_Printf("connect ip = 0x%x!\n",struIp.addr);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = struIp.addr;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if(fd < 0)
+    {
+        return ZC_RET_ERROR;
+    }
+    if (ZC_CLOUD_PORT != port)
+    {
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE,
+               (const char *) &keepalive_enable, sizeof( keepalive_enable ));   
+    }
+    ZC_Printf("Start connecting...\n\r");
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr))< 0)
+    {
+        close(fd);
+        if(g_struProtocolController.struCloudConnection.u32ConnectionTimes++>20)
+        {
+           g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
+        }
+
+        return ZC_RET_ERROR;
+    }
+    g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
+
+    ZC_Printf("connect ok!\n");
+    g_struProtocolController.struCloudConnection.u32Socket = fd;
+
+    ZC_Rand(g_struProtocolController.RandMsg);
+    return ZC_RET_OK;
+}
+/*************************************************
+* Function: HF_ListenClient
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+u32 ESP_ListenClient(PTC_Connection *pstruConnection)
+{
+    int fd; 
+    struct sockaddr_in servaddr;
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(fd<0)
+        return ZC_RET_ERROR;
+
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
+    servaddr.sin_port = htons(pstruConnection->u16Port);
+    if(bind(fd,(struct sockaddr *)&servaddr,sizeof(servaddr))<0)
+    {
+        close(fd);
+        return ZC_RET_ERROR;
+    }
+    
+    if (listen(fd, TCP_DEFAULT_LISTEN_BACKLOG)< 0)
+    {
+        close(fd);
+        return ZC_RET_ERROR;
+    }
+
+    ZC_Printf("Tcp Listen Port = %d\n", pstruConnection->u16Port);
+    g_struProtocolController.struClientConnection.u32Socket = fd;
+
+    return ZC_RET_OK;
+}
+
+/*************************************************
+* Function: HF_BcInit
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+void ESP_BcInit(void)
+{
+    int tmp=1;
+    struct sockaddr_in addr; 
+
+    addr.sin_family = AF_INET; 
+    addr.sin_port = htons(ZC_MOUDLE_PORT); 
+    addr.sin_addr.s_addr=htonl(INADDR_ANY);
+
+    g_Bcfd = socket(AF_INET, SOCK_DGRAM, 0); 
+
+    tmp=1; 
+    setsockopt(g_Bcfd, SOL_SOCKET,SO_BROADCAST,&tmp,sizeof(tmp)); 
+
+    //hfnet_set_udp_broadcast_port_valid(ZC_MOUDLE_PORT, ZC_MOUDLE_PORT + 1);
+
+    bind(g_Bcfd, (struct sockaddr*)&addr, sizeof(addr)); 
+    g_struProtocolController.u16SendBcNum = 0;
+
+    memset((char*)&struRemoteAddr,0,sizeof(struRemoteAddr));
+    struRemoteAddr.sin_family = AF_INET; 
+    struRemoteAddr.sin_port = htons(ZC_MOUDLE_BROADCAST_PORT); 
+    struRemoteAddr.sin_addr.s_addr=inet_addr("255.255.255.255"); 
+    g_pu8RemoteAddr = (u8*)&struRemoteAddr;
+    //g_u32BcSleepCount = 2.5 * 250000;
+    g_u32BcSleepCount = 10000;
+
+    return;
+}
+
+/*************************************************
+* Function: HF_Cloudfunc
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
+static void HF_Cloudfunc(void* arg) 
+{
+    int fd;
+    u32 u32Timer = 0;
+
+    ESP_BcInit();
+
+    while(1) 
+    {    
+    	if (TI_IS_IP_ACQUIRED(g_ulStatus))
+        {
+            ESP_GotIp();
+            ESP_WakeUp();
+            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
+        }
+        if (TI_IS_DISCONNECTED(g_ulStatus))
+        {
+            ZC_Printf("TI_Cloudfunc dis");
+            ESP_Sleep();
+            ESP_BcInit();
+            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_DISCONNECTED);
+        }
+        fd = g_struProtocolController.struCloudConnection.u32Socket;
+        PCT_Run();
+        HF_CloudRecvfunc();
+        Uart_RecvFromMcu();
+        
+        if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
+        {
+            close(fd);
+            if (0 == g_struProtocolController.struCloudConnection.u32ConnectionTimes)
+            {
+                u32Timer = 1000;
+            }
+            else
+            {
+                u32Timer = rand();
+                u32Timer = (PCT_TIMER_INTERVAL_RECONNECT) * (u32Timer % 10 + 1);
+            }
+            PCT_ReconnectCloud(&g_struProtocolController, u32Timer);
+            g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
+            g_struUartBuffer.u32RecvLen = 0;
+        }
+        else
+        {
+            MSG_SendDataToCloud((u8*)&g_struProtocolController.struCloudConnection);
+        }
+        ZC_SendBc();
+        sys_msleep(100);
+    } 
+}
+
 /*************************************************
 * Function: UARTRx_Buf_Init
 * Description:
@@ -1277,6 +1016,92 @@ Uart_RecvFromMcu(void)
         }    
         
     }
+
+}
+
+int //ICACHE_FLASH_ATTR
+ESP_Init(void)
+{
+	char mac_buf[MAC_LEN];
+    char mac_string[ZC_HS_DEVICE_ID_LEN];
+    u32 u32BinAddr;
+	g_u64Domain = ((((u64)((SUB_DOMAIN_ID & 0xff00) >> 8)) << 48) + (((u64)(SUB_DOMAIN_ID & 0xff)) << 56) + (((u64)MAJOR_DOMAIN_ID & 0xff) << 40) + ((((u64)MAJOR_DOMAIN_ID & 0xff00) >> 8) << 32)
+	+ ((((u64)MAJOR_DOMAIN_ID & 0xff0000) >> 16) << 24)
+	+ ((((u64)MAJOR_DOMAIN_ID & 0xff000000) >> 24) << 16)
+	+ ((((u64)MAJOR_DOMAIN_ID & 0xff00000000) >> 32) << 8)
+	+ ((((u64)MAJOR_DOMAIN_ID & 0xff0000000000) >> 40) << 0));
+
+    printf("ESP Init\n");
+
+    g_struHfAdapter.pfunConnectToCloud = ESP_ConnectToCloud;
+    g_struHfAdapter.pfunListenClient = ESP_ListenClient;
+    g_struHfAdapter.pfunSendTcpData = ESP_SendTcpData;   
+    g_struHfAdapter.pfunUpdate = ESP_FirmwareUpdate;     
+    g_struHfAdapter.pfunUpdateFinish = ESP_FirmwareUpdateFinish;
+    g_struHfAdapter.pfunSendToMoudle = ESP_SendDataToMoudle;  
+    g_struHfAdapter.pfunSetTimer = ESP_SetTimer;   
+    g_struHfAdapter.pfunStopTimer = ESP_StopTimer;
+    g_struHfAdapter.pfunRest = ESP_Rest;
+    g_struHfAdapter.pfunWriteFlash = ESP_WriteDataToFlash;
+    g_struHfAdapter.pfunSendUdpData = ESP_SendUdpData;   
+    g_struHfAdapter.pfunGetMac = ESP_GetMac;
+    g_struHfAdapter.pfunReboot = ESP_Reboot;
+    g_struHfAdapter.pfunUartSend = ESP_UartSend;
+
+    g_u16TcpMss = 1000;
+
+    PCT_Init(&g_struHfAdapter);
+
+    g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
+    g_struUartBuffer.u32RecvLen = 0;
+    ESP_ReadDataFormFlash();
+    ESP_BcInit();
+
+    printf("ESP Init1\n");
+
+    memset(g_u8DeviceId, '0', ZC_HS_DEVICE_ID_LEN);
+    memset(mac_string, '\0', ZC_HS_DEVICE_ID_LEN);
+    
+    wifi_get_macaddr(STATION_IF, mac_buf);
+    ZCHEX_Printf(mac_buf, MAC_LEN);
+    ZC_HexToString(mac_string, mac_buf, MAC_LEN);
+    memcpy(g_u8DeviceId, mac_string, MAC_LEN * 2);
+
+    printf("ESP Init2\n");
+
+    memcpy(g_struRegisterInfo.u8PrivateKey, g_u8ModuleKey, ZC_MODULE_KEY_LEN);
+    memcpy(g_struRegisterInfo.u8DeviciId, g_u8DeviceId, ZC_HS_DEVICE_ID_LEN);
+    memcpy(g_struRegisterInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, &g_u64Domain, ZC_DOMAIN_LEN);
+    memcpy(g_struRegisterInfo.u8EqVersion, g_u8EqVersion, ZC_EQVERSION_LEN);
+
+    printf("ESP Init3\n");
+
+    u32BinAddr = system_get_userbin_addr();
+    if (USER1_BIN_ADDR == u32BinAddr)
+    {
+        g_struProtocolController.u32UserBinNum = 0x81;
+    }
+    else if (USER2_BIN_ADDR == u32BinAddr)
+    {
+        g_struProtocolController.u32UserBinNum = 0x1;
+    }
+    //ESP_CreateTaskTimer();
+    printf("ESP Init4\n");
+
+	if(xTaskCreate(HF_Cloudfunc, ((const char*)"HF_Cloudfunc"), 512, NULL, 2, NULL) != 1)
+    {   
+		printf("\n\r%s xTaskCreate(init_thread) failed", __FUNCTION__);
+    }
+    printf("ESP Init5\n");
+#if 0
+
+	if(xTaskCreate(HF_CloudRecvfunc, ((const char*)"HF_CloudRecvfunc"), 512, NULL, 2, NULL) != 1)
+    {   
+		printf("\n\r%s xTaskCreate(init_thread) failed", __FUNCTION__);
+    }    
+    printf("ESP Init6\n");
+#endif
+    return 1;
 
 }
 

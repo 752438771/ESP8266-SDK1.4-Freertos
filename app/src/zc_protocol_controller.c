@@ -17,7 +17,8 @@
 #include "user_config.h"
 #include "espconn.h"
 
-//#include "gpio.h"
+#include "gpio.h"
+#include "gpio_register.h"
 #include "eagle_soc.h"
 
 
@@ -337,8 +338,8 @@ PCT_ConnectCloud(PTC_ProtocolCon *pstruContoller)
         return;
     }
     //wait for tcp connect success
-    //pstruContoller->u8MainState = PCT_STATE_WAIT_ACCESS;
-	//pstruContoller->u8keyRecv = PCT_KEY_UNRECVED;
+    pstruContoller->u8MainState = PCT_STATE_WAIT_ACCESS;
+	pstruContoller->u8keyRecv = PCT_KEY_UNRECVED;
 }
 
 /*************************************************
@@ -1045,7 +1046,7 @@ void PCT_TurnOnOffLight(PTC_ProtocolCon *pstruContoller, MSG_Buffer *pstruBuffer
         case 0:
         case 1:
             u32Value = ((pstruLed->u8LedOnOff == 0) ? 1 : 0);
-            //GPIO_OUTPUT_SET(GPIO_ID_PIN(4), u32Value);
+            GPIO_OUTPUT_SET(GPIO_ID_PIN(4), u32Value);
             break;
         default:
             ZC_Printf("u8LedOnOff is %d\n", pstruLed->u8LedOnOff);
@@ -1241,8 +1242,10 @@ PCT_Sleep()
             TIMER_StopTimer((u8)u32Index);
         }
     }
+#ifdef NONOS
     (void)espconn_disconnect(&tcp_server_conn);
     os_delay_us(1000);
+#endif
     TIMER_Init();
     g_struProtocolController.u8ReconnectTimer = PCT_TIMER_INVAILD;
     g_struProtocolController.u8SendMoudleTimer = PCT_TIMER_INVAILD;

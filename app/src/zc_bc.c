@@ -40,7 +40,7 @@ ZC_SendBc()
         EVENT_BuildBcMsg(g_u8MsgBuildBuffer, &u16Len);
         if (g_struProtocolController.u16SendBcNum < (PCT_SEND_BC_MAX_NUM))
         {
-            //ZC_Printf("Send Bc...\n");
+            ZC_Printf("Send Bc...\n");
             struParam.u8NeedPoll = 0;
             struParam.pu8AddrPara = g_pu8RemoteAddr;
             g_struProtocolController.pstruMoudleFun->pfunSendUdpData(g_Bcfd, g_u8MsgBuildBuffer, u16Len, &struParam);  

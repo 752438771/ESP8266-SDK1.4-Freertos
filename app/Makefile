@@ -180,6 +180,7 @@ INCLUDES := $(INCLUDES) -I $(PDIR)include
 #INCLUDES += -I $(PDIR)ATCMD
 INCLUDES += -I $(PDIR)../include/espressif/esp8266
 INCLUDES += -I $(PDIR)../include/lwip/ipv4/lwip
+INCLUDES += -I $(PDIR)../include/lwip/lwip
 #INCLUDES += -I $(PDIR)../include/freertos
 INCLUDES += -I $(PDIR)driver
 INCLUDES += -I $(PDIR)src
