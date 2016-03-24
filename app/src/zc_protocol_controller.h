@@ -187,7 +187,6 @@ extern MSG_Buffer g_struRetxBuffer;
 
 extern u8 g_u8MsgBuildBuffer[MSG_BULID_BUFFER_MAXLEN];
 
-extern u16 g_u16TcpMss;
 extern ZC_ClientInfo g_struClientInfo;
 
 #ifdef __cplusplus

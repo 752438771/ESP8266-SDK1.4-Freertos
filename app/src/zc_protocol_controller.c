@@ -306,8 +306,6 @@ PCT_SendCloudAccessMsg3(PTC_ProtocolCon *pstruContoller)
 void //ICACHE_FLASH_ATTR
 PCT_DisConnectCloud(PTC_ProtocolCon *pstruContoller)
 {
-    (void)espconn_disconnect(&tcp_server_conn);
-    os_delay_us(1000);
     pstruContoller->u8MainState = PCT_STATE_DISCONNECT_CLOUD;
     pstruContoller->u8keyRecv = PCT_KEY_UNRECVED;
     MSG_Init();
@@ -1242,10 +1240,6 @@ PCT_Sleep()
             TIMER_StopTimer((u8)u32Index);
         }
     }
-#ifdef NONOS
-    (void)espconn_disconnect(&tcp_server_conn);
-    os_delay_us(1000);
-#endif
     TIMER_Init();
     g_struProtocolController.u8ReconnectTimer = PCT_TIMER_INVAILD;
     g_struProtocolController.u8SendMoudleTimer = PCT_TIMER_INVAILD;

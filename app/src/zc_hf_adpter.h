@@ -15,7 +15,6 @@
 #include <zc_protocol_controller.h>
 #include <zc_module_interface.h>
 #include "esp_timer.h"
-//#include "os_type.h"
 #include "bmd.h"
 
 #define NUM_DESCS                         30
@@ -115,8 +114,6 @@ void ESP_ReadDataFormFlash(void);
 void ESP_WriteDataToFlash(u8 *pu8Data, u16 u16Len);
 void ESP_GotIp(void);
 void ESP_WakeUp(void);
-void ESP_UdpBroadcast(void);
-void ESP_CreateTaskTimer(void);
 void UARTRx_Buf_Init(UARTStruct *qp, u8 *rxbuf, u16 len);
 void UartInit(void);
 void Uart_RecvFromMcu(void);

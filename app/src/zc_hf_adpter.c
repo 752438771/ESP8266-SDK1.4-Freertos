@@ -30,18 +30,12 @@
 
 #define  FLASH_ADDRESS            0x200000
 
-#define  HF_SUCCESS            0
-
-#define AcTaskPrio        1
-#define AcTaskQueueLen    10
-
 u8  g_u8EqVersion[]={0,0,0,0};      
 u8  g_u8ModuleKey[ZC_MODULE_KEY_LEN] =DEFAULT_IOT_PRIVATE_KEY;
 u64  g_u64Domain;
 u8  g_u8DeviceId[ZC_HS_DEVICE_ID_LEN];
 
 //u64 SUB_DOMAIN_ID	=	0xFFFFFFFFFFFFFFFF;//×ÓÓòid
-vu32 g_u32DomainMagicFlag = 0xFFFFFFFF;
 
 extern PTC_ProtocolCon  g_struProtocolController;
 PTC_ModuleAdapter g_struHfAdapter;
@@ -52,6 +46,7 @@ MSG_Buffer g_struClientBuffer;
 
 extern UARTStruct UART0Port;
 extern PTC_OtaBuf g_struOtaBuf;
+
 MSG_Queue  g_struRecvQueue;
 MSG_Buffer g_struSendBuffer[MSG_BUFFER_SEND_MAX_NUM];
 MSG_Queue  g_struSendQueue;
@@ -62,31 +57,14 @@ u8 g_u8ClientSendLen = 0;
 u8 UART0RxBuf[UART0RX_RING_LEN];
 u8 pCmdWifiBuf[UART0RX_RING_LEN];
 
-u16 g_u16TcpMss;
-u16 g_u16LocalPort;
-
 u8 g_u8recvbuffer[HF_MAX_SOCKET_LEN];
 ZC_UartBuffer g_struUartBuffer;
 ESP_TimerInfo g_struEspTimer[ZC_TIMER_MAX_NUM];
 
 u8  g_u8BcSendBuffer[100];
-u8  g_u8JdRcvBuffer[256];
 u32 g_u32BcSleepCount = 800;//800
 
 struct sockaddr_in struRemoteAddr;
-
-
-LOCAL struct espconn tcp_client_conn;    /* ×öserver */
-struct espconn tcp_server_conn;          /* ×öclient */
-
-LOCAL esp_tcp esptcp;
-LOCAL struct espconn user_udp_espconn;
-
-LOCAL os_timer_t task_timer;
-
-LOCAL os_timer_t dns_timer;
-
-ip_addr_t tcp_server_ip;
 
 extern volatile unsigned long  g_ulStatus;
 extern void AC_UartProcess(u8* inBuf, u32 datalen);
@@ -163,9 +141,7 @@ ESP_WriteDataToFlash(u8 *pu8Data, u16 u16Len)
 void //ICACHE_FLASH_ATTR
 ESP_timer_callback(void *timer_arg)
 {
-    //ZC_Printf("ESP_timer_callback: 1\n");
     u8 u8TimeId = *(u8 *)timer_arg;
-    //ZC_Printf("ESP_timer_callback: u8TimeId is %d\n", u8TimeId);
     TIMER_TimeoutAction(u8TimeId);
     TIMER_StopTimer(u8TimeId);
 }
@@ -362,11 +338,17 @@ ESP_Rest(void)
     ESP_WriteDataToFlash((u8 *)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
 
     g_struProtocolController.u8SmntFlag = SMART_CONFIG_STATE;
-	//SmartLink();
 
     xTaskCreate(smartconfig_task, "smartconfig_task", 256, NULL, 2, NULL);
 }
-
+/*************************************************
+* Function: ESP_SendTcpData
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 void ESP_SendTcpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstruParam)
 {
     send(u32Fd, pu8Data, u16DataLen, 0);
@@ -385,7 +367,6 @@ void ESP_SendUdpData(u32 u32Fd, u8 *pu8Data, u16 u16DataLen, ZC_SendParam *pstru
         (struct sockaddr *)pstruParam->pu8AddrPara,
         sizeof(struct sockaddr_in)); 
 }
-
 /*************************************************
 * Function: ESP_GetMac
 * Description: 
@@ -432,20 +413,8 @@ ESP_GotIp(void)
 {
 	struct ip_info info;
 	wifi_get_ip_info(0, &info);
-	//memcpy(user_udp_espconn.proto.udp->local_ip, (u8*)&(info.ip.addr), 4);
 	g_u32GloablIp = info.ip.addr;
-
 }
-/*************************************************
-* Function: ESP_Init
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-
-
 /*************************************************
 * Function: ESP_WakeUp
 * Description: 
@@ -506,32 +475,6 @@ ESP_Sleep()
     g_struProtocolController.u32RecvAccessFlag = 0;
 }
 /*************************************************
-* Function: ESP_Cloudfunc
-* Description: 
-* Author: cxy 
-* Returns: 
-* Parameter: 
-* History:
-*************************************************/
-/*************************************************
-* Function: ESP_CreateTaskTimer
-* Description:
-* Author: cxy
-* Returns:
-* Parameter:
-* History:
-*************************************************/
-void ESP_CreateTaskTimer(void)
-{
-#if 0
-    os_timer_disarm(&task_timer);
-    os_timer_setfn(&task_timer, (os_timer_func_t *)ESP_Cloudfunc, NULL);
-    os_timer_arm(&task_timer, 100, 0);
-//#else
-    xTaskCreate( ESP_Cloudfunc, ( signed char * ) "ESP_Cloudfunc", 384, ( void * ) NULL, 2, NULL); 
-#endif
-}
-/*************************************************
 * Function: ESP_CreateTaskTimer
 * Description:
 * Author: cxy
@@ -571,18 +514,15 @@ u32 ESP_GetRandTime(void)
     u32Timer = (PCT_TIMER_INTERVAL_RECONNECT) * (u32Timer % 10 + 1 + u32Base);  
     return u32Timer;
 }
-
-
-
 /*************************************************
-* Function: HF_CloudRecvfunc
+* Function: ESP_CloudRecvfunc
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-static void HF_CloudRecvfunc(void) 
+static void ESP_CloudRecvfunc(void) 
 {
     s8 s8ret;
     s32 s32RecvLen=0; 
@@ -720,10 +660,8 @@ static void HF_CloudRecvfunc(void)
         } 
     }
 }
-
-
 /*************************************************
-* Function: HF_ConnectToCloud
+* Function: ESP_ConnectToCloud
 * Description: 
 * Author: cxy 
 * Returns: 
@@ -791,7 +729,7 @@ u32 ESP_ConnectToCloud(PTC_Connection *pstruConnection)
     return ZC_RET_OK;
 }
 /*************************************************
-* Function: HF_ListenClient
+* Function: ESP_ListenClient
 * Description: 
 * Author: cxy 
 * Returns: 
@@ -830,7 +768,7 @@ u32 ESP_ListenClient(PTC_Connection *pstruConnection)
 }
 
 /*************************************************
-* Function: HF_BcInit
+* Function: ESP_BcInit
 * Description: 
 * Author: cxy 
 * Returns: 
@@ -861,21 +799,19 @@ void ESP_BcInit(void)
     struRemoteAddr.sin_port = htons(ZC_MOUDLE_BROADCAST_PORT); 
     struRemoteAddr.sin_addr.s_addr=inet_addr("255.255.255.255"); 
     g_pu8RemoteAddr = (u8*)&struRemoteAddr;
-    //g_u32BcSleepCount = 2.5 * 250000;
     g_u32BcSleepCount = 10000;
 
     return;
 }
-
 /*************************************************
-* Function: HF_Cloudfunc
+* Function: ESP_Cloudfunc
 * Description: 
 * Author: cxy 
 * Returns: 
 * Parameter: 
 * History:
 *************************************************/
-static void HF_Cloudfunc(void* arg) 
+static void ESP_Cloudfunc(void* arg) 
 {
     int fd;
     u32 u32Timer = 0;
@@ -899,7 +835,7 @@ static void HF_Cloudfunc(void* arg)
         }
         fd = g_struProtocolController.struCloudConnection.u32Socket;
         PCT_Run();
-        HF_CloudRecvfunc();
+        ESP_CloudRecvfunc();
         Uart_RecvFromMcu();
         
         if (PCT_STATE_DISCONNECT_CLOUD == g_struProtocolController.u8MainState)
@@ -1018,7 +954,14 @@ Uart_RecvFromMcu(void)
     }
 
 }
-
+/*************************************************
+* Function: ESP_Init
+* Description:
+* Author: hx 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 int //ICACHE_FLASH_ATTR
 ESP_Init(void)
 {
@@ -1048,16 +991,12 @@ ESP_Init(void)
     g_struHfAdapter.pfunReboot = ESP_Reboot;
     g_struHfAdapter.pfunUartSend = ESP_UartSend;
 
-    g_u16TcpMss = 1000;
-
     PCT_Init(&g_struHfAdapter);
 
     g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
     g_struUartBuffer.u32RecvLen = 0;
     ESP_ReadDataFormFlash();
     ESP_BcInit();
-
-    printf("ESP Init1\n");
 
     memset(g_u8DeviceId, '0', ZC_HS_DEVICE_ID_LEN);
     memset(mac_string, '\0', ZC_HS_DEVICE_ID_LEN);
@@ -1067,14 +1006,10 @@ ESP_Init(void)
     ZC_HexToString(mac_string, mac_buf, MAC_LEN);
     memcpy(g_u8DeviceId, mac_string, MAC_LEN * 2);
 
-    printf("ESP Init2\n");
-
     memcpy(g_struRegisterInfo.u8PrivateKey, g_u8ModuleKey, ZC_MODULE_KEY_LEN);
     memcpy(g_struRegisterInfo.u8DeviciId, g_u8DeviceId, ZC_HS_DEVICE_ID_LEN);
     memcpy(g_struRegisterInfo.u8DeviciId + ZC_HS_DEVICE_ID_LEN, &g_u64Domain, ZC_DOMAIN_LEN);
     memcpy(g_struRegisterInfo.u8EqVersion, g_u8EqVersion, ZC_EQVERSION_LEN);
-
-    printf("ESP Init3\n");
 
     u32BinAddr = system_get_userbin_addr();
     if (USER1_BIN_ADDR == u32BinAddr)
@@ -1085,22 +1020,11 @@ ESP_Init(void)
     {
         g_struProtocolController.u32UserBinNum = 0x1;
     }
-    //ESP_CreateTaskTimer();
-    printf("ESP Init4\n");
 
-	if(xTaskCreate(HF_Cloudfunc, ((const char*)"HF_Cloudfunc"), 512, NULL, 2, NULL) != 1)
+	if(xTaskCreate(ESP_Cloudfunc, ((const char*)"HF_Cloudfunc"), 512, NULL, 2, NULL) != 1)
     {   
 		printf("\n\r%s xTaskCreate(init_thread) failed", __FUNCTION__);
     }
-    printf("ESP Init5\n");
-#if 0
-
-	if(xTaskCreate(HF_CloudRecvfunc, ((const char*)"HF_CloudRecvfunc"), 512, NULL, 2, NULL) != 1)
-    {   
-		printf("\n\r%s xTaskCreate(init_thread) failed", __FUNCTION__);
-    }    
-    printf("ESP Init6\n");
-#endif
     return 1;
 
 }
