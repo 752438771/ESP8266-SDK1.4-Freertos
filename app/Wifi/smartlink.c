@@ -20,8 +20,16 @@
 #include "SysLayerInit.h"
 #include "esp_libc.h"
 
-extern void ESP_ChangeToNormalState(void);
+//extern void ESP_ChangeToNormalState(void);
 
+/*************************************************
+* Function: smartlink_done
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 LOCAL void //ICACHE_FLASH_ATTR
 smartlink_done(sc_status status, void *pdata)
 {
@@ -54,19 +62,21 @@ smartlink_done(sc_status status, void *pdata)
             os_printf("Phone ip: %d.%d.%d.%d\n", phone_ip[0], phone_ip[1], phone_ip[2], phone_ip[3]);
 
         }
-        ESP_ChangeToNormalState();
+        //ESP_ChangeToNormalState();
         smartconfig_stop();
         break;
     }
 
 }
 
-/******************************************************************************
- * FunctionName : SmartLink
- * Description  : ÷«ƒ‹≈‰÷√
- * Parameters   :
- * Returns      :
-*******************************************************************************/
+/*************************************************
+* Function: SmartLink
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 void //ICACHE_FLASH_ATTR
 SmartLink(void)
 {
@@ -74,13 +84,27 @@ SmartLink(void)
     //smartconfig_stop();
 	smartconfig_start(smartlink_done);
 }
-
+/*************************************************
+* Function: SmartLinkInter
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 void //ICACHE_FLASH_ATTR
 SmartLinkInter(void)
 { 
 	ESP_Rest();
 }
-
+/*************************************************
+* Function: smartconfig_task
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 void ICACHE_FLASH_ATTR
 smartconfig_task(void *pvParameters)
 {
@@ -88,12 +112,14 @@ smartconfig_task(void *pvParameters)
     
     vTaskDelete(NULL);
 }
-/******************************************************************************
- * FunctionName : WifiInit
- * Description  : wifi≥ı ºªØ
- * Parameters   :
- * Returns      :
-*******************************************************************************/
+/*************************************************
+* Function: WifiInit
+* Description: 
+* Author: cxy 
+* Returns: 
+* Parameter: 
+* History:
+*************************************************/
 void //ICACHE_FLASH_ATTR
 WifiInit(void)
 {

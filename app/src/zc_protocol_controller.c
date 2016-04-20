@@ -108,14 +108,14 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
 {
     g_struProtocolController.pstruMoudleFun = pstruAdapter;
 
-    g_struProtocolController.struCloudConnection.u32Socket = PCT_SERVER_TCP_SOCKET;//PCT_INVAILD_SOCKET;
+    g_struProtocolController.struCloudConnection.u32Socket = PCT_INVAILD_SOCKET;
 
     /*config connection type*/
     g_struProtocolController.struCloudConnection.u16Port = ZC_CLOUD_PORT;
     g_struProtocolController.struCloudConnection.u8IpType = ZC_IPTYPE_IPV4;
     g_struProtocolController.struCloudConnection.u8ConnectionType = ZC_CONNECT_TYPE_TCP;
 
-    g_struProtocolController.struClientConnection.u32Socket = PCT_CLIENT_TCP_SOCKET;//PCT_INVAILD_SOCKET;
+    g_struProtocolController.struClientConnection.u32Socket = PCT_INVAILD_SOCKET;
 
     /*config connection type*/
     g_struProtocolController.struClientConnection.u16Port = ZC_SERVER_PORT;
@@ -123,11 +123,8 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
     g_struProtocolController.struClientConnection.u8ConnectionType = ZC_CONNECT_TYPE_TCP;
 
     ZC_ConfigInitDefault();
-
     MSG_Init();
     TIMER_Init();
-
-    g_struProtocolController.u32RecvAccessFlag = 0;
 
     g_struProtocolController.u8keyRecv = PCT_KEY_UNRECVED;
     g_struProtocolController.u8ReconnectTimer = PCT_TIMER_INVAILD;
@@ -138,7 +135,6 @@ PCT_Init(PTC_ModuleAdapter *pstruAdapter)
     g_struProtocolController.u8RebootTimer = PCT_TIMER_INVAILD;
 
     g_struProtocolController.u8MainState = PCT_STATE_INIT;
-    g_struProtocolController.u8SmntFlag = 0;
     
     g_struOtaBuf.u16DateUsed = 0;
     g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
@@ -259,7 +255,7 @@ PCT_SendCloudAccessMsg1(PTC_ProtocolCon *pstruContoller)
 * History:
 *************************************************/
 #define ZC_MODULE_VERSION   0
-#define ZC_MODULE_TYPE      0
+#define ZC_MODULE_TYPE      20      /* esp8266 */
 void //ICACHE_FLASH_ATTR
 PCT_SendCloudAccessMsg3(PTC_ProtocolCon *pstruContoller)
 {
@@ -380,7 +376,7 @@ PCT_ReconnectCloud(PTC_ProtocolCon *pstruContoller, u32 u32ReConnectTimer)
     pstruContoller->pstruMoudleFun->pfunSetTimer(PCT_TIMER_RECONNECT, 
         u32ReConnectTimer, &pstruContoller->u8ReconnectTimer);
     ZC_Printf("u32ReConnectTimer = %d\n",u32ReConnectTimer / 1000);
-    pstruContoller->struCloudConnection.u32Socket = PCT_SERVER_TCP_SOCKET;//PCT_INVAILD_SOCKET;
+    pstruContoller->struCloudConnection.u32Socket = PCT_INVAILD_SOCKET;
     pstruContoller->u8keyRecv = PCT_KEY_UNRECVED; 
     pstruContoller->u8MainState = PCT_STATE_INIT;
 }
@@ -511,7 +507,6 @@ PCT_RecvAccessMsg2(PTC_ProtocolCon *pstruContoller)
                     u16Port = ZC_HTONS(pstruAccessPoint->u16ServerPort);
                     ZC_StoreAccessInfo((u8 *)&u32Addr,(u8 *)&u16Port);
                     PCT_DisConnectCloud(pstruContoller);
-                    g_struProtocolController.u32RecvAccessFlag = 1;
                     ZC_Printf("Recv Access Point ok,Cloud Addr=%x,port=%u!\n",u32Addr,u16Port);
                     
                 }
@@ -1209,13 +1204,17 @@ PCT_Run()
 void //ICACHE_FLASH_ATTR
 PCT_WakeUp()
 {
+    u32 u32FreeHeap = 0;
     if (PCT_STATE_INIT == g_struProtocolController.u8MainState)
     {
-        ZC_Printf("PCT_WakeUp\n");
+        //ZC_Printf("PCT_WakeUp\n");
         g_struProtocolController.u16SendBcNum = 0;
         ZC_ClientWakeUp();
         g_struProtocolController.u8MainState = PCT_STATE_ACCESS_NET;
     }
+
+    //u32FreeHeap = system_get_free_heap_size();
+    //ZC_Printf("free heap size is %d\n", u32FreeHeap);
 }
 
 /*************************************************

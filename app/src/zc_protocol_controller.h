@@ -34,8 +34,6 @@
 #define    PCT_STATE_DISCONNECT_CLOUD       (8)
 
 #define    PCT_INVAILD_SOCKET               (0xFFFFFFFF)
-#define    PCT_SERVER_TCP_SOCKET                (0)
-#define    PCT_CLIENT_TCP_SOCKET                (1)
 
 #define    PCT_TIMER_RECONNECT              (0)
 #define    PCT_TIMER_REACCESS               (1)
@@ -154,8 +152,6 @@ typedef struct
     u8   u8SendMoudleTimer;
     u8   u8RegisterTimer;
     u8   u8ReSendMoudleNum;
-    u8   u8SmntFlag;
-    u32  u32RecvAccessFlag;
     u8   *pu8SendMoudleBuffer;
     u32  u32UserBinNum;
     u32  u32OtaSectorNum;

@@ -117,7 +117,7 @@ void ESP_WakeUp(void);
 void UARTRx_Buf_Init(UARTStruct *qp, u8 *rxbuf, u16 len);
 void UartInit(void);
 void Uart_RecvFromMcu(void);
-void ESP_ChangeToNormalState(void);
+//void ESP_ChangeToNormalState(void);
 u32 ESP_FlashEraseAddWrite(void);
 u32 ESP_GetRandTime(void);
 

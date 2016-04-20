@@ -240,7 +240,7 @@ ZC_RecvDataFromClient(u32 ClientId, u8 *pu8Data, u32 u32DataLen)
         pstruHead->u16TotalMsg = ZC_HTONS((u16)u32CiperLen);
 
         struParam.u8NeedPoll = 0;            
-        g_struProtocolController.pstruMoudleFun->pfunSendTcpData(PCT_CLIENT_TCP_SOCKET, g_u8MsgBuildBuffer,
+        g_struProtocolController.pstruMoudleFun->pfunSendTcpData(ClientId, g_u8MsgBuildBuffer,
             u32CiperLen + sizeof(ZC_SecHead), &struParam);
         return;            
     }

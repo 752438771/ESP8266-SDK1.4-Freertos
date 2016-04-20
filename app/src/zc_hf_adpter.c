@@ -325,14 +325,6 @@ ESP_SendDataToMoudle(u8 *pu8Data, u16 u16DataLen)
 void //ICACHE_FLASH_ATTR
 ESP_Rest(void)
 {
-#if 0
-    os_printf("ESP_Rest\n");
-    g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
-    g_struZcConfigDb.struSwitchInfo.u32SecSwitch = 1;
-    ESP_WriteDataToFlash((u8 *)&g_struZcConfigDb, sizeof(ZC_ConfigDB));
-#endif
-    g_struProtocolController.u8SmntFlag = SMART_CONFIG_STATE;
-
     xTaskCreate(smartconfig_task, "smartconfig_task", 256, NULL, 2, NULL);
 }
 /*************************************************
@@ -464,47 +456,6 @@ ESP_Sleep()
     g_struUartBuffer.u32Status = MSG_BUFFER_IDLE;
     g_struUartBuffer.u32RecvLen = 0;
 
-    g_struProtocolController.u32RecvAccessFlag = 0;
-}
-/*************************************************
-* Function: ESP_CreateTaskTimer
-* Description:
-* Author: cxy
-* Returns:
-* Parameter:
-* History:
-*************************************************/
-void ESP_ChangeToNormalState(void)
-{
-    g_struProtocolController.u8SmntFlag = 0;
-}
-/*************************************************
-* Function: ESP_GetRandTime
-* Description:
-* Author: cxy
-* Returns:
-* Parameter:
-* History:
-*************************************************/
-u32 ESP_GetRandTime(void)
-{
-    u32 u32Base, u32Timer;
-
-    if (1 == g_struProtocolController.u32RecvAccessFlag)
-    {
-        g_struProtocolController.u32RecvAccessFlag = 0;
-        u32Timer = PCT_TIMER_INTERVAL_RECONNECT;
-        return u32Timer;
-    }
-    if (g_struProtocolController.struCloudConnection.u32ConnectionTimes > 20)
-    {
-        g_struZcConfigDb.struSwitchInfo.u32ServerAddrConfig = 0;
-        g_struProtocolController.struCloudConnection.u32ConnectionTimes = 0;
-    }
-    u32Base = 5 * g_struProtocolController.struCloudConnection.u32ConnectionTimes;
-    u32Timer = rand();
-    u32Timer = (PCT_TIMER_INTERVAL_RECONNECT) * (u32Timer % 10 + 1 + u32Base);  
-    return u32Timer;
 }
 /*************************************************
 * Function: ESP_CloudRecvfunc
@@ -648,8 +599,9 @@ static void ESP_CloudRecvfunc(void)
         s32RecvLen = recvfrom(g_Bcfd, g_u8BcSendBuffer, 100, 0, (struct sockaddr *)&addr, (socklen_t*)&tmp); 
         if(s32RecvLen > 0) 
         {
+            ZC_Printf("Udp recv len is %d\n", s32RecvLen);
             ZC_SendClientQueryReq(g_u8BcSendBuffer, (u16)s32RecvLen);
-        } 
+        }
     }
 }
 /*************************************************
@@ -734,7 +686,7 @@ u32 ESP_ListenClient(PTC_Connection *pstruConnection)
     struct sockaddr_in servaddr;
 
     fd = socket(AF_INET, SOCK_STREAM, 0);
-    if(fd<0)
+    if(fd < 0)
         return ZC_RET_ERROR;
 
     memset(&servaddr, 0, sizeof(servaddr));
@@ -769,21 +721,22 @@ u32 ESP_ListenClient(PTC_Connection *pstruConnection)
 *************************************************/
 void ESP_BcInit(void)
 {
-    int tmp=1;
+    int tmp = 1;
     struct sockaddr_in addr; 
 
     addr.sin_family = AF_INET; 
     addr.sin_port = htons(ZC_MOUDLE_PORT); 
-    addr.sin_addr.s_addr=htonl(INADDR_ANY);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_len = sizeof(addr); 
 
     g_Bcfd = socket(AF_INET, SOCK_DGRAM, 0); 
 
-    tmp=1; 
-    setsockopt(g_Bcfd, SOL_SOCKET,SO_BROADCAST,&tmp,sizeof(tmp)); 
+    setsockopt(g_Bcfd, SOL_SOCKET, SO_BROADCAST, &tmp, sizeof(tmp)); 
 
-    //hfnet_set_udp_broadcast_port_valid(ZC_MOUDLE_PORT, ZC_MOUDLE_PORT + 1);
-
-    bind(g_Bcfd, (struct sockaddr*)&addr, sizeof(addr)); 
+    if (0 != bind(g_Bcfd, (struct sockaddr*)&addr, sizeof(addr)))
+    {
+        ZC_Printf("Udp bind error\n");
+    }
     g_struProtocolController.u16SendBcNum = 0;
 
     memset((char*)&struRemoteAddr,0,sizeof(struRemoteAddr));
@@ -960,6 +913,7 @@ ESP_Init(void)
 	char mac_buf[MAC_LEN];
     char mac_string[ZC_HS_DEVICE_ID_LEN];
     u32 u32BinAddr;
+    u32 u32FreeHeap;
 	g_u64Domain = ((((u64)((SUB_DOMAIN_ID & 0xff00) >> 8)) << 48) + (((u64)(SUB_DOMAIN_ID & 0xff)) << 56) + (((u64)MAJOR_DOMAIN_ID & 0xff) << 40) + ((((u64)MAJOR_DOMAIN_ID & 0xff00) >> 8) << 32)
 	+ ((((u64)MAJOR_DOMAIN_ID & 0xff0000) >> 16) << 24)
 	+ ((((u64)MAJOR_DOMAIN_ID & 0xff000000) >> 24) << 16)
